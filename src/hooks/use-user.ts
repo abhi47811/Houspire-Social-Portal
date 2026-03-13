@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { SmUser } from "@/lib/utils";
 import type { User, Session } from "@supabase/supabase-js";
@@ -13,15 +13,12 @@ interface UseUserReturn {
   signOut: () => Promise<void>;
 }
 
-function isLockError(err: unknown): boolean {
-  return err instanceof Error && err.message.includes("Lock broken");
-}
-
 export function useUser(): UseUserReturn {
   const [user, setUser] = useState<SmUser | null>(null);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const initialized = useRef(false);
 
   const fetchSmUser = useCallback(
     async (userId: string): Promise<SmUser | null> => {
@@ -70,16 +67,37 @@ export function useUser(): UseUserReturn {
       }
     };
 
-    // Use onAuthStateChange as the single source of truth
+    // Primary: use getSession() directly for reliable initialization
+    const initSession = async () => {
+      if (initialized.current) return;
+      initialized.current = true;
+
+      try {
+        const { data: { session }, error: sessError } = await supabase.auth.getSession();
+        if (sessError) {
+          console.error("getSession error:", sessError);
+        }
+        if (!cancelled) {
+          await handleSession(session);
+        }
+      } catch (err) {
+        console.error("initSession error:", err);
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    initSession();
+
+    // Secondary: listen for future auth state changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return;
 
       try {
-        if (event === "INITIAL_SESSION") {
-          await handleSession(session);
-        } else if (event === "SIGNED_IN") {
+        if (event === "SIGNED_IN") {
           await handleSession(session);
         } else if (event === "SIGNED_OUT") {
           setUser(null);
@@ -90,26 +108,20 @@ export function useUser(): UseUserReturn {
           setAuthUser(session.user);
         }
       } catch (err) {
-        // Ignore Web Lock errors — they're transient
-        if (isLockError(err)) {
-          console.warn("Web Lock error (ignored):", err);
-          return;
-        }
+        console.error("Auth state change error:", err);
         if (!cancelled) {
-          console.error("Auth state change error:", err);
           setError(err instanceof Error ? err : new Error(String(err)));
           setLoading(false);
         }
       }
     });
 
-    // Safety timeout
+    // Safety timeout — 6 seconds
     const timeout = setTimeout(() => {
-      if (!cancelled && loading) {
-        console.warn("useUser: timeout, forcing loading=false");
+      if (!cancelled) {
         setLoading(false);
       }
-    }, 10000);
+    }, 6000);
 
     return () => {
       cancelled = true;
@@ -122,20 +134,12 @@ export function useUser(): UseUserReturn {
     try {
       const supabase = createClient();
       await supabase.auth.signOut();
+    } catch (err) {
+      console.error("signOut error:", err);
+    } finally {
       setUser(null);
       setAuthUser(null);
       setError(null);
-    } catch (err) {
-      // Ignore lock errors on sign out
-      if (isLockError(err)) {
-        console.warn("Lock error during signOut (ignored)");
-        setUser(null);
-        setAuthUser(null);
-        setError(null);
-        return;
-      }
-      setError(err instanceof Error ? err : new Error(String(err)));
-      throw err;
     }
   };
 
