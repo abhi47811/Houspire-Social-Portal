@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { useUser } from "@/hooks/use-user";
@@ -16,12 +16,25 @@ export default function AppLayout({
   const { user, authUser, loading, error, signOut } = useUser();
   const { unreadCount, notifications, markAsRead, markAllAsRead } =
     useNotifications(user?.id || null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (!loading && !authUser) {
       router.push("/login");
     }
   }, [loading, authUser, router]);
+
+  // Auto-retry once if authUser exists but user is null
+  useEffect(() => {
+    if (!loading && authUser && !user && retryCount < 2) {
+      const timer = setTimeout(() => {
+        console.log("[layout] retrying - reloading page");
+        setRetryCount((c) => c + 1);
+        window.location.reload();
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, authUser, user, retryCount]);
 
   if (loading) {
     return (
@@ -36,7 +49,6 @@ export default function AppLayout({
     );
   }
 
-  // Show error state
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-white">
@@ -54,8 +66,19 @@ export default function AppLayout({
     );
   }
 
-  // If auth user exists but no sm_user record, show a message instead of blank page
   if (authUser && !user) {
+    if (retryCount < 2) {
+      return (
+        <div className="flex items-center justify-center min-h-screen bg-white">
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-12 h-12 mb-4 rounded-full bg-gray-100">
+              <div className="w-8 h-8 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin" />
+            </div>
+            <p className="text-gray-600 font-medium">Setting up your account...</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center min-h-screen bg-white">
         <div className="text-center max-w-md p-6">
@@ -83,12 +106,8 @@ export default function AppLayout({
 
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
       <Sidebar user={user!} onSignOut={signOut} />
-
-      {/* Main Content */}
       <div className="flex-1 flex flex-col ml-64">
-        {/* Header */}
         <Header
           user={user!}
           unreadCount={unreadCount}
@@ -97,8 +116,6 @@ export default function AppLayout({
           onMarkAllAsRead={markAllAsRead}
           onSignOut={signOut}
         />
-
-        {/* Page Content */}
         <main className="flex-1 overflow-auto">
           <div className="p-8">{children}</div>
         </main>
