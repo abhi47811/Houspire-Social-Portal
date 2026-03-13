@@ -1,5 +1,6 @@
 "use client";
 
+// v3 — 2026-03-13 — direct REST, no gotrue-js dependency for init
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { SmUser } from "@/lib/utils";
@@ -8,6 +9,8 @@ import type { User } from "@supabase/supabase-js";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const STORAGE_KEY = `sb-${new URL(SUPABASE_URL).hostname.split(".")[0]}-auth-token`;
+
+const BUILD_VERSION = "v3-rest-direct";
 
 interface UseUserReturn {
   user: SmUser | null;
@@ -32,8 +35,24 @@ async function fetchSmUserREST(
         },
       }
     );
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      console.warn(`[useUser ${BUILD_VERSION}] sm_users failed: ${resp.status}`);
+      return null;
+    }
     return await resp.json();
+  } catch (err) {
+    console.warn(`[useUser ${BUILD_VERSION}] sm_users error:`, err);
+    return null;
+  }
+}
+
+function getStoredSession(): { user: User; access_token: string; refresh_token?: string } | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.user || !parsed?.access_token) return null;
+    return parsed;
   } catch {
     return null;
   }
@@ -50,37 +69,60 @@ export function useUser(): UseUserReturn {
     if (initialized.current) return;
     initialized.current = true;
 
+    console.log(`[useUser ${BUILD_VERSION}] initializing`);
+
     let cancelled = false;
 
     const init = async () => {
       try {
-        // Read session directly from localStorage (bypasses gotrue-js locks)
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) {
-          setLoading(false);
+        const session = getStoredSession();
+        if (!session) {
+          console.log(`[useUser ${BUILD_VERSION}] no stored session`);
+          if (!cancelled) setLoading(false);
           return;
         }
 
-        const session = JSON.parse(raw);
-        if (!session?.user || !session?.access_token) {
-          setLoading(false);
-          return;
+        console.log(`[useUser ${BUILD_VERSION}] found session for ${session.user.email}`);
+
+        const expiresAt = (session as any).expires_at;
+        const now = Math.floor(Date.now() / 1000);
+        if (expiresAt && expiresAt < now) {
+          console.log(`[useUser ${BUILD_VERSION}] token expired, refreshing`);
+          try {
+            const supabase = createClient();
+            const { data, error: refreshError } = await supabase.auth.refreshSession();
+            if (refreshError || !data.session) {
+              localStorage.removeItem(STORAGE_KEY);
+              if (!cancelled) setLoading(false);
+              return;
+            }
+            const refreshed = getStoredSession();
+            if (refreshed) {
+              if (!cancelled) setAuthUser(refreshed.user);
+              const smUser = await fetchSmUserREST(refreshed.user.id, refreshed.access_token);
+              if (!cancelled) { setUser(smUser); setLoading(false); }
+              return;
+            }
+          } catch {
+            localStorage.removeItem(STORAGE_KEY);
+            if (!cancelled) setLoading(false);
+            return;
+          }
         }
 
-        if (cancelled) return;
-        setAuthUser(session.user);
-
-        // Fetch sm_user via direct REST call (proven reliable)
-        const smUser = await fetchSmUserREST(
-          session.user.id,
-          session.access_token
-        );
-
-        if (cancelled) return;
-        setUser(smUser);
-        setLoading(false);
+        if (!cancelled) setAuthUser(session.user);
+        const smUser = await fetchSmUserREST(session.user.id, session.access_token);
+        if (!cancelled) {
+          if (smUser) {
+            console.log(`[useUser ${BUILD_VERSION}] loaded: ${smUser.full_name}, role: ${smUser.role}`);
+          } else {
+            console.warn(`[useUser ${BUILD_VERSION}] no sm_user for ${session.user.id}`);
+          }
+          setUser(smUser);
+          setLoading(false);
+        }
       } catch (err) {
-        console.error("useUser init error:", err);
+        console.error(`[useUser ${BUILD_VERSION}] init error:`, err);
         if (!cancelled) {
           setError(err instanceof Error ? err : new Error(String(err)));
           setLoading(false);
@@ -90,37 +132,22 @@ export function useUser(): UseUserReturn {
 
     init();
 
-    // Listen for auth changes (sign-in, sign-out, token refresh)
     const supabase = createClient();
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return;
-
+      console.log(`[useUser ${BUILD_VERSION}] auth event: ${event}`);
       if (event === "SIGNED_IN" && session?.user) {
         setAuthUser(session.user);
-        const smUser = await fetchSmUserREST(
-          session.user.id,
-          session.access_token!
-        );
-        if (!cancelled) {
-          setUser(smUser);
-          setLoading(false);
-        }
+        const smUser = await fetchSmUserREST(session.user.id, session.access_token!);
+        if (!cancelled) { setUser(smUser); setLoading(false); }
       } else if (event === "SIGNED_OUT") {
-        setUser(null);
-        setAuthUser(null);
-        setError(null);
-        setLoading(false);
+        setUser(null); setAuthUser(null); setError(null); setLoading(false);
       } else if (event === "TOKEN_REFRESHED" && session?.user) {
         setAuthUser(session.user);
       }
     });
 
-    return () => {
-      cancelled = true;
-      subscription?.unsubscribe();
-    };
+    return () => { cancelled = true; subscription?.unsubscribe(); };
   }, []);
 
   const signOut = async () => {
@@ -130,9 +157,7 @@ export function useUser(): UseUserReturn {
     } catch (err) {
       console.error("signOut error:", err);
     } finally {
-      setUser(null);
-      setAuthUser(null);
-      setError(null);
+      setUser(null); setAuthUser(null); setError(null);
       localStorage.removeItem(STORAGE_KEY);
     }
   };
