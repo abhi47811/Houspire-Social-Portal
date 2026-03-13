@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { SmUser } from "@/lib/utils";
-import type { User } from "@supabase/supabase-js";
+import type { User, Session } from "@supabase/supabase-js";
 
 interface UseUserReturn {
   user: SmUser | null;
@@ -11,16 +11,6 @@ interface UseUserReturn {
   loading: boolean;
   error: Error | null;
   signOut: () => Promise<void>;
-}
-
-// Helper: wrap a promise with a timeout
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
-    ),
-  ]);
 }
 
 export function useUser(): UseUserReturn {
@@ -35,15 +25,11 @@ export function useUser(): UseUserReturn {
       userId: string
     ): Promise<SmUser | null> => {
       try {
-        const { data: smUser, error: userError } = await withTimeout(
-          supabase
-            .from("sm_users")
-            .select("*")
-            .eq("auth_user_id", userId)
-            .single(),
-          8000,
-          "sm_users query"
-        );
+        const { data: smUser, error: userError } = await supabase
+          .from("sm_users")
+          .select("*")
+          .eq("auth_user_id", userId)
+          .single();
 
         if (userError) {
           console.error("SM Users query error:", userError);
@@ -63,71 +49,60 @@ export function useUser(): UseUserReturn {
     let cancelled = false;
     const supabase = createClient();
 
-    const initializeUser = async () => {
-      try {
-        setLoading(true);
+    const handleSession = async (session: Session | null) => {
+      if (cancelled) return;
 
-        // Get current auth user with timeout
-        const {
-          data: { user: currentUser },
-          error: authError,
-        } = await withTimeout(supabase.auth.getUser(), 8000, "auth.getUser");
+      if (!session?.user) {
+        setAuthUser(null);
+        setUser(null);
+        setLoading(false);
+        return;
+      }
 
-        if (cancelled) return;
+      setAuthUser(session.user);
+      const smUser = await fetchSmUser(supabase, session.user.id);
 
-        if (authError) {
-          console.error("Auth error:", authError);
-          setAuthUser(null);
-          setUser(null);
-          return;
-        }
-
-        setAuthUser(currentUser);
-
-        if (!currentUser) {
-          setUser(null);
-          return;
-        }
-
-        // Fetch matching sm_users record
-        const smUser = await fetchSmUser(supabase, currentUser.id);
-        if (cancelled) return;
-
+      if (!cancelled) {
         setUser(smUser);
-      } catch (err) {
-        console.error("useUser error:", err);
-        if (!cancelled) {
-          setError(err instanceof Error ? err : new Error(String(err)));
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
     };
 
-    initializeUser();
-
-    // Subscribe to auth changes
+    // Use ONLY onAuthStateChange — do NOT call getUser() separately.
+    // Calling both causes a Web Locks conflict (AbortError: Lock broken).
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return;
 
-      if (event === "SIGNED_OUT") {
+      if (event === "INITIAL_SESSION") {
+        // First event: fires with current session (or null if not logged in)
+        await handleSession(session);
+      } else if (event === "SIGNED_IN") {
+        await handleSession(session);
+      } else if (event === "SIGNED_OUT") {
         setUser(null);
         setAuthUser(null);
-      } else if (event === "SIGNED_IN" && session?.user) {
-        setAuthUser(session.user);
-        const smUser = await fetchSmUser(supabase, session.user.id);
-        if (!cancelled) {
-          setUser(smUser);
+        setLoading(false);
+      } else if (event === "TOKEN_REFRESHED") {
+        // Update auth user on token refresh
+        if (session?.user) {
+          setAuthUser(session.user);
         }
       }
     });
 
+    // Safety timeout: if INITIAL_SESSION never fires within 10s, stop loading
+    const timeout = setTimeout(() => {
+      if (!cancelled && loading) {
+        console.error("useUser: INITIAL_SESSION timeout - forcing loading=false");
+        setLoading(false);
+      }
+    }, 10000);
+
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
       subscription?.unsubscribe();
     };
   }, [fetchSmUser]);
