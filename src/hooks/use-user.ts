@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { SmUser } from "@/lib/utils";
-import type { User, Session } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const STORAGE_KEY = `sb-${new URL(SUPABASE_URL).hostname.split(".")[0]}-auth-token`;
 
 interface UseUserReturn {
   user: SmUser | null;
@@ -13,6 +17,28 @@ interface UseUserReturn {
   signOut: () => Promise<void>;
 }
 
+async function fetchSmUserREST(
+  userId: string,
+  accessToken: string
+): Promise<SmUser | null> {
+  try {
+    const resp = await fetch(
+      `${SUPABASE_URL}/rest/v1/sm_users?auth_user_id=eq.${userId}&select=*`,
+      {
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/vnd.pgrst.object+json",
+        },
+      }
+    );
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch {
+    return null;
+  }
+}
+
 export function useUser(): UseUserReturn {
   const [user, setUser] = useState<SmUser | null>(null);
   const [authUser, setAuthUser] = useState<User | null>(null);
@@ -20,115 +46,82 @@ export function useUser(): UseUserReturn {
   const [error, setError] = useState<Error | null>(null);
   const initialized = useRef(false);
 
-  const fetchSmUser = useCallback(
-    async (userId: string): Promise<SmUser | null> => {
-      try {
-        const supabase = createClient();
-        const { data: smUser, error: userError } = await supabase
-          .from("sm_users")
-          .select("*")
-          .eq("auth_user_id", userId)
-          .single();
+  useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
 
-        if (userError) {
-          console.error("SM Users query error:", userError);
-          return null;
+    let cancelled = false;
+
+    const init = async () => {
+      try {
+        // Read session directly from localStorage (bypasses gotrue-js locks)
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          setLoading(false);
+          return;
         }
 
-        return smUser || null;
-      } catch (err) {
-        console.error("fetchSmUser failed:", err);
-        return null;
-      }
-    },
-    []
-  );
+        const session = JSON.parse(raw);
+        if (!session?.user || !session?.access_token) {
+          setLoading(false);
+          return;
+        }
 
-  useEffect(() => {
-    let cancelled = false;
-    const supabase = createClient();
+        if (cancelled) return;
+        setAuthUser(session.user);
 
-    const handleSession = async (session: Session | null) => {
-      if (cancelled) return;
+        // Fetch sm_user via direct REST call (proven reliable)
+        const smUser = await fetchSmUserREST(
+          session.user.id,
+          session.access_token
+        );
 
-      if (!session?.user) {
-        setAuthUser(null);
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-
-      setAuthUser(session.user);
-      const smUser = await fetchSmUser(session.user.id);
-
-      if (!cancelled) {
+        if (cancelled) return;
         setUser(smUser);
         setLoading(false);
-      }
-    };
-
-    // Primary: use getSession() directly for reliable initialization
-    const initSession = async () => {
-      if (initialized.current) return;
-      initialized.current = true;
-
-      try {
-        const { data: { session }, error: sessError } = await supabase.auth.getSession();
-        if (sessError) {
-          console.error("getSession error:", sessError);
-        }
-        if (!cancelled) {
-          await handleSession(session);
-        }
       } catch (err) {
-        console.error("initSession error:", err);
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    initSession();
-
-    // Secondary: listen for future auth state changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (cancelled) return;
-
-      try {
-        if (event === "SIGNED_IN") {
-          await handleSession(session);
-        } else if (event === "SIGNED_OUT") {
-          setUser(null);
-          setAuthUser(null);
-          setError(null);
-          setLoading(false);
-        } else if (event === "TOKEN_REFRESHED" && session?.user) {
-          setAuthUser(session.user);
-        }
-      } catch (err) {
-        console.error("Auth state change error:", err);
+        console.error("useUser init error:", err);
         if (!cancelled) {
           setError(err instanceof Error ? err : new Error(String(err)));
           setLoading(false);
         }
       }
-    });
+    };
 
-    // Safety timeout — 6 seconds
-    const timeout = setTimeout(() => {
-      if (!cancelled) {
+    init();
+
+    // Listen for auth changes (sign-in, sign-out, token refresh)
+    const supabase = createClient();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (cancelled) return;
+
+      if (event === "SIGNED_IN" && session?.user) {
+        setAuthUser(session.user);
+        const smUser = await fetchSmUserREST(
+          session.user.id,
+          session.access_token!
+        );
+        if (!cancelled) {
+          setUser(smUser);
+          setLoading(false);
+        }
+      } else if (event === "SIGNED_OUT") {
+        setUser(null);
+        setAuthUser(null);
+        setError(null);
         setLoading(false);
+      } else if (event === "TOKEN_REFRESHED" && session?.user) {
+        setAuthUser(session.user);
       }
-    }, 6000);
+    });
 
     return () => {
       cancelled = true;
-      clearTimeout(timeout);
       subscription?.unsubscribe();
     };
-  }, [fetchSmUser]);
+  }, []);
 
   const signOut = async () => {
     try {
@@ -140,14 +133,9 @@ export function useUser(): UseUserReturn {
       setUser(null);
       setAuthUser(null);
       setError(null);
+      localStorage.removeItem(STORAGE_KEY);
     }
   };
 
-  return {
-    user,
-    authUser,
-    loading,
-    error,
-    signOut,
-  };
+  return { user, authUser, loading, error, signOut };
 }
