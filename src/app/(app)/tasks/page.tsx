@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useUser } from "@/hooks/use-user";
 import { SmTask, SmUser } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,43 +19,20 @@ import { ChevronDown } from "lucide-react";
 type FilterType = "all" | "my-tasks" | "instagram" | "linkedin" | "both";
 
 export default function TasksPage() {
+  const { user: currentUser, loading: userLoading } = useUser();
   const [tasks, setTasks] = useState<(SmTask & { current_owner?: SmUser })[]>(
     []
   );
   const [selectedTask, setSelectedTask] = useState<SmTask | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<SmUser | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   useEffect(() => {
-    fetchCurrentUser();
-  }, []);
-
-  useEffect(() => {
-    if (currentUser) {
+    if (!userLoading && currentUser) {
       fetchTasks();
     }
-  }, [currentUser, filter]);
-
-  const fetchCurrentUser = async () => {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (user) {
-      const { data: userData } = await supabase
-        .from("sm_users")
-        .select("*")
-        .eq("auth_user_id", user.id)
-        .single();
-
-      if (userData) {
-        setCurrentUser(userData);
-      }
-    }
-  };
+  }, [currentUser, userLoading, filter]);
 
   const fetchTasks = async () => {
     setLoading(true);

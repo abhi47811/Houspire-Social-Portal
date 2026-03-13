@@ -58,8 +58,12 @@ interface SmHashtagSet {
   hashtags: string[];
   platform: string;
   category: string;
-  usage_count: number;
-  is_active: boolean;
+  times_used: number;
+  avg_engagement_rate: number | null;
+  avg_reach: number | null;
+  best_performing_tag: string | null;
+  is_pinned: boolean;
+  created_by: string | null;
   created_at: string;
 }
 
@@ -110,7 +114,6 @@ export default function HashtagsPage() {
         supabase
           .from('sm_hashtag_sets')
           .select('*')
-          .eq('is_active', true)
           .order('created_at', { ascending: false }),
         supabase
           .from('sm_hashtag_analytics')
@@ -156,8 +159,7 @@ export default function HashtagsPage() {
           hashtags: tagsArray,
           platform: formData.platform || null,
           category: formData.category || null,
-          usage_count: 0,
-          is_active: true,
+          times_used: 0,
         },
       ]);
 
@@ -362,7 +364,7 @@ export default function HashtagsPage() {
                       <div className="text-sm text-muted-foreground space-y-1">
                         {set.platform && <p>Platform: {set.platform}</p>}
                         {set.category && <p>Category: {set.category}</p>}
-                        <p>Used {set.usage_count} times</p>
+                        <p>Used {set.times_used || 0} times</p>
                       </div>
                     </div>
                   </CardContent>

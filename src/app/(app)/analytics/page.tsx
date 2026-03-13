@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useUser } from '@/hooks/use-user';
-import { formatDate, formatRelativeTime } from '@/lib/utils';
+import { formatRelativeTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
@@ -32,17 +32,18 @@ interface DailyMetric {
   id: string;
   platform: string;
   date: string;
-  followers: number;
-  impressions: number;
-  reach: number;
-  engagement_rate: number;
-  likes: number;
-  comments: number;
-  shares: number;
-  saves: number;
-  profile_visits: number;
-  website_clicks: number;
-  created_at: string;
+  follower_count: number;
+  follower_change: number;
+  total_impressions: number;
+  total_reach: number;
+  avg_engagement_rate: number;
+  total_likes: number;
+  total_comments: number;
+  total_shares: number;
+  total_saves: number;
+  posts_published: number;
+  top_post_id: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 interface Competitor {
@@ -124,13 +125,13 @@ export default function AnalyticsPage() {
   }, [userLoading, dateRange, supabase]);
 
   const calculateKPIs = () => {
-    const totalImpressions = metrics.reduce((sum, m) => sum + (m.impressions || 0), 0);
-    const totalReach = metrics.reduce((sum, m) => sum + (m.reach || 0), 0);
+    const totalImpressions = metrics.reduce((sum, m) => sum + (m.total_impressions || 0), 0);
+    const totalReach = metrics.reduce((sum, m) => sum + (m.total_reach || 0), 0);
     const avgEngagementRate =
-      metrics.length > 0 ? (metrics.reduce((sum, m) => sum + (m.engagement_rate || 0), 0) / metrics.length).toFixed(2) : '0';
+      metrics.length > 0 ? (metrics.reduce((sum, m) => sum + (m.avg_engagement_rate || 0), 0) / metrics.length).toFixed(2) : '0';
     const followerGrowth =
       metrics.length > 1
-        ? metrics[metrics.length - 1].followers - metrics[0].followers
+        ? metrics[metrics.length - 1].follower_count - metrics[0].follower_count
         : 0;
 
     return {
@@ -144,8 +145,8 @@ export default function AnalyticsPage() {
   const prepareChartData = () => {
     return metrics.map((m) => ({
       date: new Date(m.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      impressions: m.impressions,
-      reach: m.reach,
+      impressions: m.total_impressions,
+      reach: m.total_reach,
     }));
   };
 
@@ -156,10 +157,10 @@ export default function AnalyticsPage() {
       if (!platformData[m.platform]) {
         platformData[m.platform] = { likes: 0, comments: 0, shares: 0, saves: 0 };
       }
-      platformData[m.platform].likes += m.likes || 0;
-      platformData[m.platform].comments += m.comments || 0;
-      platformData[m.platform].shares += m.shares || 0;
-      platformData[m.platform].saves += m.saves || 0;
+      platformData[m.platform].likes += m.total_likes || 0;
+      platformData[m.platform].comments += m.total_comments || 0;
+      platformData[m.platform].shares += m.total_shares || 0;
+      platformData[m.platform].saves += m.total_saves || 0;
     });
 
     return Object.entries(platformData).map(([platform, data]) => ({

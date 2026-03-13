@@ -221,7 +221,7 @@ export default function SettingsPage() {
                 <Avatar className="w-20 h-20">
                   <AvatarImage src={user.avatar_url || ""} />
                   <AvatarFallback>
-                    {user.name
+                    {(user.name || "U")
                       .split(" ")
                       .map((n) => n[0])
                       .join("")
@@ -435,7 +435,7 @@ export default function SettingsPage() {
                               <Avatar className="w-8 h-8">
                                 <AvatarImage src={member.avatar_url || ""} />
                                 <AvatarFallback>
-                                  {member.name
+                                  {(member.name || "U")
                                     .split(" ")
                                     .map((n) => n[0])
                                     .join("")

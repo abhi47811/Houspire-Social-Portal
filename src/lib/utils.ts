@@ -171,7 +171,7 @@ export interface SmMedia {
   width: number | null;
   height: number | null;
   folder: string;
-  tags: string[];
+  tags: string[] | null;
   alt_text: string | null;
   is_archived: boolean;
   uploaded_by: string | null;

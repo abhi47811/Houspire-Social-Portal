@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useUser } from '@/hooks/use-user';
-import { formatDate, STATUS_LABELS, STATUS_COLORS } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,18 +15,18 @@ interface BrandKit {
   id: string;
   workspace_id: string;
   brand_name: string;
+  tagline: string | null;
   logo_url: string | null;
-  primary_color: string;
-  secondary_color: string;
-  accent_color: string;
-  font_primary: string;
-  font_secondary: string;
+  primary_colors: string[];
+  secondary_colors: string[];
+  fonts: string[];
   tone_of_voice: string;
-  brand_guidelines: string;
-  do_phrases: string[];
-  dont_phrases: string[];
-  created_at: string;
-  updated_at: string;
+  guidelines_url: string | null;
+  do_examples: string[];
+  dont_examples: string[];
+  notes: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export default function BrandPage() {
@@ -78,16 +77,15 @@ export default function BrandPage() {
         .from('sm_brand_kit')
         .update({
           brand_name: formData.brand_name,
-          primary_color: formData.primary_color,
-          secondary_color: formData.secondary_color,
-          accent_color: formData.accent_color,
-          font_primary: formData.font_primary,
-          font_secondary: formData.font_secondary,
+          tagline: formData.tagline,
+          primary_colors: formData.primary_colors,
+          secondary_colors: formData.secondary_colors,
+          fonts: formData.fonts,
           tone_of_voice: formData.tone_of_voice,
-          brand_guidelines: formData.brand_guidelines,
-          do_phrases: formData.do_phrases,
-          dont_phrases: formData.dont_phrases,
-          updated_at: new Date().toISOString(),
+          guidelines_url: formData.guidelines_url,
+          do_examples: formData.do_examples,
+          dont_examples: formData.dont_examples,
+          notes: formData.notes,
         })
         .eq('id', brandKit.id);
 
@@ -147,63 +145,33 @@ export default function BrandPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="primary_color">Primary Color</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="primary_color"
-                      type="color"
-                      value={formData.primary_color || '#000000'}
-                      onChange={(e) => setFormData({ ...formData, primary_color: e.target.value })}
-                      className="h-10 w-20"
-                    />
-                    <Input
-                      type="text"
-                      value={formData.primary_color || ''}
-                      onChange={(e) => setFormData({ ...formData, primary_color: e.target.value })}
-                      className="flex-1"
-                    />
-                  </div>
-                </div>
+              <div>
+                <Label htmlFor="tagline">Tagline</Label>
+                <Input
+                  id="tagline"
+                  value={formData.tagline || ''}
+                  onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
+                />
+              </div>
 
-                <div>
-                  <Label htmlFor="secondary_color">Secondary Color</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="secondary_color"
-                      type="color"
-                      value={formData.secondary_color || '#000000'}
-                      onChange={(e) => setFormData({ ...formData, secondary_color: e.target.value })}
-                      className="h-10 w-20"
-                    />
-                    <Input
-                      type="text"
-                      value={formData.secondary_color || ''}
-                      onChange={(e) => setFormData({ ...formData, secondary_color: e.target.value })}
-                      className="flex-1"
-                    />
-                  </div>
-                </div>
+              <div>
+                <Label htmlFor="primary_colors">Primary Colors (comma-separated hex codes)</Label>
+                <Input
+                  id="primary_colors"
+                  value={(formData.primary_colors || []).join(', ')}
+                  onChange={(e) => setFormData({ ...formData, primary_colors: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                  placeholder="#1a1a1a, #ffffff"
+                />
+              </div>
 
-                <div>
-                  <Label htmlFor="accent_color">Accent Color</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="accent_color"
-                      type="color"
-                      value={formData.accent_color || '#000000'}
-                      onChange={(e) => setFormData({ ...formData, accent_color: e.target.value })}
-                      className="h-10 w-20"
-                    />
-                    <Input
-                      type="text"
-                      value={formData.accent_color || ''}
-                      onChange={(e) => setFormData({ ...formData, accent_color: e.target.value })}
-                      className="flex-1"
-                    />
-                  </div>
-                </div>
+              <div>
+                <Label htmlFor="secondary_colors">Secondary Colors (comma-separated hex codes)</Label>
+                <Input
+                  id="secondary_colors"
+                  value={(formData.secondary_colors || []).join(', ')}
+                  onChange={(e) => setFormData({ ...formData, secondary_colors: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                  placeholder="#666666, #cccccc"
+                />
               </div>
             </CardContent>
           </Card>
@@ -214,20 +182,12 @@ export default function BrandPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="font_primary">Primary Font</Label>
+                <Label htmlFor="fonts">Fonts (comma-separated)</Label>
                 <Input
-                  id="font_primary"
-                  value={formData.font_primary || ''}
-                  onChange={(e) => setFormData({ ...formData, font_primary: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="font_secondary">Secondary Font</Label>
-                <Input
-                  id="font_secondary"
-                  value={formData.font_secondary || ''}
-                  onChange={(e) => setFormData({ ...formData, font_secondary: e.target.value })}
+                  id="fonts"
+                  value={(formData.fonts || []).join(', ')}
+                  onChange={(e) => setFormData({ ...formData, fonts: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                  placeholder="Inter, Playfair Display"
                 />
               </div>
             </CardContent>
@@ -248,12 +208,26 @@ export default function BrandPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Brand Guidelines</CardTitle>
+              <CardTitle>Brand Guidelines URL</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Input
+                value={formData.guidelines_url || ''}
+                onChange={(e) => setFormData({ ...formData, guidelines_url: e.target.value })}
+                placeholder="https://..."
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Do Examples</CardTitle>
             </CardHeader>
             <CardContent>
               <Textarea
-                value={formData.brand_guidelines || ''}
-                onChange={(e) => setFormData({ ...formData, brand_guidelines: e.target.value })}
+                value={(formData.do_examples || []).join('\n')}
+                onChange={(e) => setFormData({ ...formData, do_examples: e.target.value.split('\n').filter(Boolean) })}
+                placeholder="Enter one example per line"
                 rows={4}
               />
             </CardContent>
@@ -261,13 +235,13 @@ export default function BrandPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Do Phrases</CardTitle>
+              <CardTitle>Don't Examples</CardTitle>
             </CardHeader>
             <CardContent>
               <Textarea
-                value={(formData.do_phrases || []).join('\n')}
-                onChange={(e) => setFormData({ ...formData, do_phrases: e.target.value.split('\n').filter(Boolean) })}
-                placeholder="Enter one phrase per line"
+                value={(formData.dont_examples || []).join('\n')}
+                onChange={(e) => setFormData({ ...formData, dont_examples: e.target.value.split('\n').filter(Boolean) })}
+                placeholder="Enter one example per line"
                 rows={4}
               />
             </CardContent>
@@ -275,13 +249,12 @@ export default function BrandPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Don't Phrases</CardTitle>
+              <CardTitle>Notes</CardTitle>
             </CardHeader>
             <CardContent>
               <Textarea
-                value={(formData.dont_phrases || []).join('\n')}
-                onChange={(e) => setFormData({ ...formData, dont_phrases: e.target.value.split('\n').filter(Boolean) })}
-                placeholder="Enter one phrase per line"
+                value={formData.notes || ''}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 rows={4}
               />
             </CardContent>
@@ -315,7 +288,7 @@ export default function BrandPage() {
         <Card>
           <CardHeader>
             <CardTitle>Brand Information</CardTitle>
-            <CardDescription>Updated {formatDate(brandKit.updated_at)}</CardDescription>
+            <CardDescription>{brandKit.tagline || 'No tagline set'}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -331,38 +304,33 @@ export default function BrandPage() {
             <CardTitle>Brand Colors</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label className="text-sm font-medium">Primary Color</Label>
-                <div className="mt-2 flex items-center gap-3">
-                  <div
-                    className="h-12 w-12 rounded border"
-                    style={{ backgroundColor: brandKit.primary_color }}
-                  />
-                  <code className="text-sm text-muted-foreground">{brandKit.primary_color}</code>
-                </div>
+            <div>
+              <Label className="text-sm font-medium">Primary Colors</Label>
+              <div className="mt-2 flex flex-wrap gap-3">
+                {(brandKit.primary_colors || []).map((color, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <div className="h-12 w-12 rounded border" style={{ backgroundColor: color }} />
+                    <code className="text-sm text-muted-foreground">{color}</code>
+                  </div>
+                ))}
+                {(!brandKit.primary_colors || brandKit.primary_colors.length === 0) && (
+                  <p className="text-sm text-muted-foreground">No primary colors set</p>
+                )}
               </div>
+            </div>
 
-              <div>
-                <Label className="text-sm font-medium">Secondary Color</Label>
-                <div className="mt-2 flex items-center gap-3">
-                  <div
-                    className="h-12 w-12 rounded border"
-                    style={{ backgroundColor: brandKit.secondary_color }}
-                  />
-                  <code className="text-sm text-muted-foreground">{brandKit.secondary_color}</code>
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium">Accent Color</Label>
-                <div className="mt-2 flex items-center gap-3">
-                  <div
-                    className="h-12 w-12 rounded border"
-                    style={{ backgroundColor: brandKit.accent_color }}
-                  />
-                  <code className="text-sm text-muted-foreground">{brandKit.accent_color}</code>
-                </div>
+            <div>
+              <Label className="text-sm font-medium">Secondary Colors</Label>
+              <div className="mt-2 flex flex-wrap gap-3">
+                {(brandKit.secondary_colors || []).map((color, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <div className="h-12 w-12 rounded border" style={{ backgroundColor: color }} />
+                    <code className="text-sm text-muted-foreground">{color}</code>
+                  </div>
+                ))}
+                {(!brandKit.secondary_colors || brandKit.secondary_colors.length === 0) && (
+                  <p className="text-sm text-muted-foreground">No secondary colors set</p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -374,18 +342,16 @@ export default function BrandPage() {
             <CardTitle>Typography</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <Label className="text-sm font-medium">Primary Font</Label>
-              <p className="text-base" style={{ fontFamily: brandKit.font_primary }}>
-                {brandKit.font_primary}
-              </p>
-            </div>
-            <div>
-              <Label className="text-sm font-medium">Secondary Font</Label>
-              <p className="text-base" style={{ fontFamily: brandKit.font_secondary }}>
-                {brandKit.font_secondary}
-              </p>
-            </div>
+            {(brandKit.fonts || []).length > 0 ? (
+              (brandKit.fonts || []).map((font, idx) => (
+                <div key={idx}>
+                  <Label className="text-sm font-medium">Font {idx + 1}</Label>
+                  <p className="text-base" style={{ fontFamily: font }}>{font}</p>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">No fonts configured</p>
+            )}
           </CardContent>
         </Card>
 
@@ -400,43 +366,53 @@ export default function BrandPage() {
         </Card>
 
         {/* Brand Guidelines */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Brand Guidelines</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed">{brandKit.brand_guidelines}</p>
-          </CardContent>
-        </Card>
+        {brandKit.guidelines_url && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Brand Guidelines</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <a href={brandKit.guidelines_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm">
+                {brandKit.guidelines_url}
+              </a>
+            </CardContent>
+          </Card>
+        )}
 
-        {/* Do Phrases */}
+        {/* Do Examples */}
         <Card>
           <CardHeader>
-            <CardTitle>Do Phrases</CardTitle>
+            <CardTitle>Do Examples</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {brandKit.do_phrases.map((phrase, idx) => (
+              {(brandKit.do_examples || []).map((phrase, idx) => (
                 <Badge key={idx} variant="default" className="bg-green-100 text-green-800 hover:bg-green-200">
-                  ✓ {phrase}
+                  {phrase}
                 </Badge>
               ))}
+              {(!brandKit.do_examples || brandKit.do_examples.length === 0) && (
+                <p className="text-sm text-muted-foreground">No examples added</p>
+              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Don't Phrases */}
+        {/* Don't Examples */}
         <Card>
           <CardHeader>
-            <CardTitle>Don't Phrases</CardTitle>
+            <CardTitle>Don't Examples</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {brandKit.dont_phrases.map((phrase, idx) => (
+              {(brandKit.dont_examples || []).map((phrase, idx) => (
                 <Badge key={idx} variant="default" className="bg-red-100 text-red-800 hover:bg-red-200">
-                  ✗ {phrase}
+                  {phrase}
                 </Badge>
               ))}
+              {(!brandKit.dont_examples || brandKit.dont_examples.length === 0) && (
+                <p className="text-sm text-muted-foreground">No examples added</p>
+              )}
             </div>
           </CardContent>
         </Card>

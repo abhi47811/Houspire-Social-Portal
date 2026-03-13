@@ -41,13 +41,18 @@ import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface AuditLog {
   id: string;
-  user_id: string;
+  actor_id: string;
+  actor_email: string | null;
+  actor_role: string | null;
   action: string;
-  entity_type: string;
-  entity_id: string;
+  resource_type: string;
+  resource_id: string;
+  resource_title: string | null;
   old_values: Record<string, unknown> | null;
   new_values: Record<string, unknown> | null;
   ip_address: string | null;
+  user_agent: string | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
   user: {
     id: string;
@@ -75,9 +80,9 @@ export default function AuditPage() {
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
-  const [actionFilter, setActionFilter] = useState('');
-  const [entityTypeFilter, setEntityTypeFilter] = useState('');
-  const [userFilter, setUserFilter] = useState('');
+  const [actionFilter, setActionFilter] = useState('__all__');
+  const [entityTypeFilter, setEntityTypeFilter] = useState('__all__');
+  const [userFilter, setUserFilter] = useState('__all__');
   const [dateFilter, setDateFilter] = useState('');
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -97,7 +102,7 @@ export default function AuditPage() {
     try {
       const { data: allLogs } = await supabase
         .from('sm_audit_log')
-        .select('action, entity_type, user:sm_users(id,name,email)', {
+        .select('action, resource_type, user:sm_users!sm_audit_log_actor_id_fkey(id,name,email)', {
           count: 'exact',
         });
 
@@ -107,7 +112,7 @@ export default function AuditPage() {
         ) as string[];
         const entityTypes = Array.from(
           new Set(
-            allLogs.map((log: any) => log.entity_type).filter(Boolean)
+            allLogs.map((log: any) => log.resource_type).filter(Boolean)
           )
         ) as string[];
         const users = Array.from(
@@ -133,16 +138,16 @@ export default function AuditPage() {
 
       let query = supabase
         .from('sm_audit_log')
-        .select('*, user:sm_users(id,name,email)', { count: 'exact' });
+        .select('*, user:sm_users!sm_audit_log_actor_id_fkey(id,name,email)', { count: 'exact' });
 
-      if (actionFilter) {
+      if (actionFilter && actionFilter !== '__all__') {
         query = query.eq('action', actionFilter);
       }
-      if (entityTypeFilter) {
-        query = query.eq('entity_type', entityTypeFilter);
+      if (entityTypeFilter && entityTypeFilter !== '__all__') {
+        query = query.eq('resource_type', entityTypeFilter);
       }
-      if (userFilter) {
-        query = query.eq('user_id', userFilter);
+      if (userFilter && userFilter !== '__all__') {
+        query = query.eq('actor_id', userFilter);
       }
       if (dateFilter) {
         const startOfDay = new Date(dateFilter);
@@ -257,7 +262,7 @@ export default function AuditPage() {
                   <SelectValue placeholder="All actions" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All actions</SelectItem>
+                  <SelectItem value="__all__">All actions</SelectItem>
                   {uniqueActions.map((action) => (
                     <SelectItem key={action} value={action}>
                       {action}
@@ -273,7 +278,7 @@ export default function AuditPage() {
                   <SelectValue placeholder="All types" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All types</SelectItem>
+                  <SelectItem value="__all__">All types</SelectItem>
                   {uniqueEntityTypes.map((type) => (
                     <SelectItem key={type} value={type}>
                       {type}
@@ -289,7 +294,7 @@ export default function AuditPage() {
                   <SelectValue placeholder="All users" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All users</SelectItem>
+                  <SelectItem value="__all__">All users</SelectItem>
                   {uniqueUsers.map((u) => (
                     <SelectItem key={u.id} value={u.id}>
                       {u.name} ({u.email})
@@ -372,9 +377,12 @@ export default function AuditPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm">
-                          <div className="font-mono text-xs">{log.entity_type}</div>
-                          <div className="text-muted-foreground">
-                            ID: {log.entity_id}
+                          <div className="font-mono text-xs">{log.resource_type}</div>
+                          {log.resource_title && (
+                            <div className="text-sm">{log.resource_title}</div>
+                          )}
+                          <div className="text-muted-foreground text-xs">
+                            ID: {log.resource_id}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -458,18 +466,27 @@ export default function AuditPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <h3 className="font-semibold text-sm mb-1">Entity Type</h3>
+                    <h3 className="font-semibold text-sm mb-1">Resource Type</h3>
                     <p className="text-sm text-muted-foreground">
-                      {selectedLog.entity_type}
+                      {selectedLog.resource_type}
                     </p>
                   </div>
                   <div>
-                    <h3 className="font-semibold text-sm mb-1">Entity ID</h3>
+                    <h3 className="font-semibold text-sm mb-1">Resource ID</h3>
                     <p className="font-mono text-xs text-muted-foreground">
-                      {selectedLog.entity_id}
+                      {selectedLog.resource_id}
                     </p>
                   </div>
                 </div>
+
+                {selectedLog.resource_title && (
+                  <div>
+                    <h3 className="font-semibold text-sm mb-1">Resource Title</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedLog.resource_title}
+                    </p>
+                  </div>
+                )}
 
                 {selectedLog.ip_address && (
                   <div>
