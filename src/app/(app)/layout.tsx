@@ -13,7 +13,7 @@ export default function AppLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { user, authUser, loading, signOut } = useUser();
+  const { user, authUser, loading, error, signOut } = useUser();
   const { unreadCount, notifications, markAsRead, markAllAsRead } =
     useNotifications(user?.id || null);
 
@@ -36,20 +36,61 @@ export default function AppLayout({
     );
   }
 
-  if (!authUser || !user) {
+  // Show error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-white">
+        <div className="text-center max-w-md p-6">
+          <p className="text-red-600 font-medium mb-2">Something went wrong</p>
+          <p className="text-gray-500 text-sm mb-4">{error.message}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Reload
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // If auth user exists but no sm_user record, show a message instead of blank page
+  if (authUser && !user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-white">
+        <div className="text-center max-w-md p-6">
+          <p className="text-gray-800 font-medium mb-2">Account Setup Needed</p>
+          <p className="text-gray-500 text-sm mb-4">
+            Your login works but your user profile is not set up yet. Please contact your administrator.
+          </p>
+          <button
+            onClick={async () => {
+              await signOut();
+              router.push("/login");
+            }}
+            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authUser) {
     return null;
   }
 
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
-      <Sidebar user={user} onSignOut={signOut} />
+      <Sidebar user={user!} onSignOut={signOut} />
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col ml-64">
         {/* Header */}
         <Header
-          user={user}
+          user={user!}
           unreadCount={unreadCount}
           notifications={notifications}
           onMarkAsRead={markAsRead}

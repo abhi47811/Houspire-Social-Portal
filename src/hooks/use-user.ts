@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { SmUser } from "@/lib/utils";
 import type { User } from "@supabase/supabase-js";
@@ -13,26 +13,74 @@ interface UseUserReturn {
   signOut: () => Promise<void>;
 }
 
+// Helper: wrap a promise with a timeout
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 export function useUser(): UseUserReturn {
   const [user, setUser] = useState<SmUser | null>(null);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
+  const fetchSmUser = useCallback(
+    async (
+      supabase: ReturnType<typeof createClient>,
+      userId: string
+    ): Promise<SmUser | null> => {
+      try {
+        const { data: smUser, error: userError } = await withTimeout(
+          supabase
+            .from("sm_users")
+            .select("*")
+            .eq("auth_user_id", userId)
+            .single(),
+          8000,
+          "sm_users query"
+        );
+
+        if (userError) {
+          console.error("SM Users query error:", userError);
+          return null;
+        }
+
+        return smUser || null;
+      } catch (err) {
+        console.error("fetchSmUser failed:", err);
+        return null;
+      }
+    },
+    []
+  );
+
   useEffect(() => {
+    let cancelled = false;
     const supabase = createClient();
 
     const initializeUser = async () => {
       try {
         setLoading(true);
 
-        // Get current auth user
+        // Get current auth user with timeout
         const {
           data: { user: currentUser },
           error: authError,
-        } = await supabase.auth.getUser();
+        } = await withTimeout(supabase.auth.getUser(), 8000, "auth.getUser");
 
-        if (authError) throw authError;
+        if (cancelled) return;
+
+        if (authError) {
+          console.error("Auth error:", authError);
+          setAuthUser(null);
+          setUser(null);
+          return;
+        }
 
         setAuthUser(currentUser);
 
@@ -42,22 +90,19 @@ export function useUser(): UseUserReturn {
         }
 
         // Fetch matching sm_users record
-        const { data: smUser, error: userError } = await supabase
-          .from("sm_users")
-          .select("*")
-          .eq("auth_user_id", currentUser.id)
-          .single();
+        const smUser = await fetchSmUser(supabase, currentUser.id);
+        if (cancelled) return;
 
-        if (userError && userError.code !== "PGRST116") {
-          // PGRST116 = no rows returned
-          throw userError;
-        }
-
-        setUser(smUser || null);
+        setUser(smUser);
       } catch (err) {
-        setError(err instanceof Error ? err : new Error(String(err)));
+        console.error("useUser error:", err);
+        if (!cancelled) {
+          setError(err instanceof Error ? err : new Error(String(err)));
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
@@ -67,28 +112,25 @@ export function useUser(): UseUserReturn {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (cancelled) return;
+
       if (event === "SIGNED_OUT") {
         setUser(null);
         setAuthUser(null);
       } else if (event === "SIGNED_IN" && session?.user) {
         setAuthUser(session.user);
-        // Fetch user record
-        const { data: smUser, error: userError } = await supabase
-          .from("sm_users")
-          .select("*")
-          .eq("auth_user_id", session.user.id)
-          .single();
-
-        if (!userError) {
+        const smUser = await fetchSmUser(supabase, session.user.id);
+        if (!cancelled) {
           setUser(smUser);
         }
       }
     });
 
     return () => {
+      cancelled = true;
       subscription?.unsubscribe();
     };
-  }, []);
+  }, [fetchSmUser]);
 
   const signOut = async () => {
     try {
