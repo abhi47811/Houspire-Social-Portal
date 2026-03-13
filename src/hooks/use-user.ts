@@ -13,6 +13,10 @@ interface UseUserReturn {
   signOut: () => Promise<void>;
 }
 
+function isLockError(err: unknown): boolean {
+  return err instanceof Error && err.message.includes("Lock broken");
+}
+
 export function useUser(): UseUserReturn {
   const [user, setUser] = useState<SmUser | null>(null);
   const [authUser, setAuthUser] = useState<User | null>(null);
@@ -20,11 +24,9 @@ export function useUser(): UseUserReturn {
   const [error, setError] = useState<Error | null>(null);
 
   const fetchSmUser = useCallback(
-    async (
-      supabase: ReturnType<typeof createClient>,
-      userId: string
-    ): Promise<SmUser | null> => {
+    async (userId: string): Promise<SmUser | null> => {
       try {
+        const supabase = createClient();
         const { data: smUser, error: userError } = await supabase
           .from("sm_users")
           .select("*")
@@ -60,7 +62,7 @@ export function useUser(): UseUserReturn {
       }
 
       setAuthUser(session.user);
-      const smUser = await fetchSmUser(supabase, session.user.id);
+      const smUser = await fetchSmUser(session.user.id);
 
       if (!cancelled) {
         setUser(smUser);
@@ -68,34 +70,43 @@ export function useUser(): UseUserReturn {
       }
     };
 
-    // Use ONLY onAuthStateChange — do NOT call getUser() separately.
-    // Calling both causes a Web Locks conflict (AbortError: Lock broken).
+    // Use onAuthStateChange as the single source of truth
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return;
 
-      if (event === "INITIAL_SESSION") {
-        // First event: fires with current session (or null if not logged in)
-        await handleSession(session);
-      } else if (event === "SIGNED_IN") {
-        await handleSession(session);
-      } else if (event === "SIGNED_OUT") {
-        setUser(null);
-        setAuthUser(null);
-        setLoading(false);
-      } else if (event === "TOKEN_REFRESHED") {
-        // Update auth user on token refresh
-        if (session?.user) {
+      try {
+        if (event === "INITIAL_SESSION") {
+          await handleSession(session);
+        } else if (event === "SIGNED_IN") {
+          await handleSession(session);
+        } else if (event === "SIGNED_OUT") {
+          setUser(null);
+          setAuthUser(null);
+          setError(null);
+          setLoading(false);
+        } else if (event === "TOKEN_REFRESHED" && session?.user) {
           setAuthUser(session.user);
+        }
+      } catch (err) {
+        // Ignore Web Lock errors — they're transient
+        if (isLockError(err)) {
+          console.warn("Web Lock error (ignored):", err);
+          return;
+        }
+        if (!cancelled) {
+          console.error("Auth state change error:", err);
+          setError(err instanceof Error ? err : new Error(String(err)));
+          setLoading(false);
         }
       }
     });
 
-    // Safety timeout: if INITIAL_SESSION never fires within 10s, stop loading
+    // Safety timeout
     const timeout = setTimeout(() => {
       if (!cancelled && loading) {
-        console.error("useUser: INITIAL_SESSION timeout - forcing loading=false");
+        console.warn("useUser: timeout, forcing loading=false");
         setLoading(false);
       }
     }, 10000);
@@ -113,7 +124,16 @@ export function useUser(): UseUserReturn {
       await supabase.auth.signOut();
       setUser(null);
       setAuthUser(null);
+      setError(null);
     } catch (err) {
+      // Ignore lock errors on sign out
+      if (isLockError(err)) {
+        console.warn("Lock error during signOut (ignored)");
+        setUser(null);
+        setAuthUser(null);
+        setError(null);
+        return;
+      }
       setError(err instanceof Error ? err : new Error(String(err)));
       throw err;
     }
