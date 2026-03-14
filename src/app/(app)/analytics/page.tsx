@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useUser } from '@/hooks/use-user';
-import { formatRelativeTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
@@ -30,71 +29,78 @@ import {
 
 interface DailyMetric {
   id: string;
-  platform: string;
+  workspace_id: string;
   date: string;
-  follower_count: number;
-  follower_change: number;
-  total_impressions: number;
-  total_reach: number;
-  avg_engagement_rate: number;
-  total_likes: number;
-  total_comments: number;
-  total_shares: number;
-  total_saves: number;
-  posts_published: number;
+  platform: string;
+  posts_published: number | null;
+  total_impressions: number | null;
+  total_reach: number | null;
+  total_likes: number | null;
+  total_comments: number | null;
+  total_shares: number | null;
+  total_saves: number | null;
+  avg_engagement_rate: number | null;
+  follower_count: number | null;
+  follower_change: number | null;
   top_post_id: string | null;
   metadata: Record<string, unknown> | null;
+  created_at: string;
 }
 
 interface Competitor {
   id: string;
+  workspace_id: string;
   name: string;
-  platform: string;
-  handle: string;
-  follower_count: number;
-  avg_engagement_rate: number;
+  instagram_handle: string | null;
+  linkedin_page_url: string | null;
+  website_url: string | null;
   notes: string | null;
-  last_checked_at: string;
+  is_active: boolean | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface CompetitorMetric {
   id: string;
   competitor_id: string;
-  date: string;
-  follower_count: number;
-  engagement_rate: number;
+  snapshot_date: string;
+  platform: string;
+  follower_count: number | null;
+  follower_change: number | null;
+  posts_count: number | null;
+  avg_likes: number | null;
+  avg_comments: number | null;
+  avg_engagement_rate: number | null;
+  top_post_url: string | null;
+  top_post_likes: number | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
 }
 
-type DateRangeOption = '7' | '30' | '90';
-
 export default function AnalyticsPage() {
-  const { user, loading: userLoading } = useUser();
-  const [dateRange, setDateRange] = useState<DateRangeOption>('30');
-  const [metrics, setMetrics] = useState<DailyMetric[]>([]);
+  const { user } = useUser();
+  const supabase = createClient();
+
+  const [dailyMetrics, setDailyMetrics] = useState<DailyMetric[]>([]);
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [competitorMetrics, setCompetitorMetrics] = useState<CompetitorMetric[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const supabase = createClient();
-
-  const getDaysAgo = (days: number) => {
-    const date = new Date();
-    date.setDate(date.getDate() - days);
-    return date.toISOString().split('T')[0];
-  };
+  const [period, setPeriod] = useState(30);
 
   useEffect(() => {
-    if (userLoading) return;
-
     const fetchData = async () => {
       try {
-        const daysAgo = getDaysAgo(parseInt(dateRange));
+        setLoading(true);
+
+        const daysAgo = new Date();
+        daysAgo.setDate(daysAgo.getDate() - period);
+        const dateStr = daysAgo.toISOString().split('T')[0];
 
         const [metricsRes, competitorsRes] = await Promise.all([
           supabase
             .from('sm_daily_metrics')
             .select('*')
-            .gte('date', daysAgo)
+            .gte('date', dateStr)
             .order('date', { ascending: true }),
           supabase.from('sm_competitors').select('*'),
         ]);
@@ -102,17 +108,20 @@ export default function AnalyticsPage() {
         if (metricsRes.error) throw metricsRes.error;
         if (competitorsRes.error) throw competitorsRes.error;
 
-        setMetrics(metricsRes.data || []);
+        setDailyMetrics(metricsRes.data || []);
         setCompetitors(competitorsRes.data || []);
 
-        if ((competitorsRes.data || []).length > 0) {
-          const { data: compMetrics, error: compMetricsError } = await supabase
+        // Fetch competitor metrics
+        if (competitorsRes.data && competitorsRes.data.length > 0) {
+          const { data: cMetrics, error: cError } = await supabase
             .from('sm_competitor_metrics')
             .select('*')
-            .gte('date', daysAgo);
+            .gte('snapshot_date', dateStr)
+            .order('snapshot_date', { ascending: false });
 
-          if (compMetricsError) throw compMetricsError;
-          setCompetitorMetrics(compMetrics || []);
+          if (!cError && cMetrics) {
+            setCompetitorMetrics(cMetrics);
+          }
         }
       } catch (error) {
         console.error('Error fetching analytics:', error);
@@ -122,218 +131,261 @@ export default function AnalyticsPage() {
     };
 
     fetchData();
-  }, [userLoading, dateRange, supabase]);
+  }, [supabase, period]);
 
-  const calculateKPIs = () => {
-    const totalImpressions = metrics.reduce((sum, m) => sum + (m.total_impressions || 0), 0);
-    const totalReach = metrics.reduce((sum, m) => sum + (m.total_reach || 0), 0);
-    const avgEngagementRate =
-      metrics.length > 0 ? (metrics.reduce((sum, m) => sum + (m.avg_engagement_rate || 0), 0) / metrics.length).toFixed(2) : '0';
-    const followerGrowth =
-      metrics.length > 1
-        ? metrics[metrics.length - 1].follower_count - metrics[0].follower_count
-        : 0;
+  // Aggregate KPIs
+  const totalImpressions = dailyMetrics.reduce(
+    (sum, m) => sum + (m.total_impressions || 0),
+    0
+  );
+  const totalReach = dailyMetrics.reduce(
+    (sum, m) => sum + (m.total_reach || 0),
+    0
+  );
+  const avgEngagement =
+    dailyMetrics.length > 0
+      ? dailyMetrics.reduce((sum, m) => sum + (m.avg_engagement_rate || 0), 0) /
+        dailyMetrics.length
+      : 0;
+  const followerGrowth = dailyMetrics.reduce(
+    (sum, m) => sum + (m.follower_change || 0),
+    0
+  );
 
-    return {
-      totalImpressions,
-      totalReach,
-      avgEngagementRate,
-      followerGrowth,
+  // Chart data - aggregate by date
+  const chartDataMap = new Map<string, { date: string; impressions: number; reach: number }>();
+  dailyMetrics.forEach((m) => {
+    const existing = chartDataMap.get(m.date) || {
+      date: m.date,
+      impressions: 0,
+      reach: 0,
     };
+    existing.impressions += m.total_impressions || 0;
+    existing.reach += m.total_reach || 0;
+    chartDataMap.set(m.date, existing);
+  });
+  const chartData = Array.from(chartDataMap.values());
+
+  // Engagement by platform
+  const platformEngagement = new Map<
+    string,
+    { platform: string; likes: number; comments: number; shares: number; saves: number }
+  >();
+  dailyMetrics.forEach((m) => {
+    const existing = platformEngagement.get(m.platform) || {
+      platform: m.platform,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      saves: 0,
+    };
+    existing.likes += m.total_likes || 0;
+    existing.comments += m.total_comments || 0;
+    existing.shares += m.total_shares || 0;
+    existing.saves += m.total_saves || 0;
+    platformEngagement.set(m.platform, existing);
+  });
+  const engagementData = Array.from(platformEngagement.values());
+
+  // Get latest competitor metric
+  const getLatestCompetitorMetric = (competitorId: string): CompetitorMetric | undefined => {
+    return competitorMetrics.find((m) => m.competitor_id === competitorId);
   };
 
-  const prepareChartData = () => {
-    return metrics.map((m) => ({
-      date: new Date(m.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      impressions: m.total_impressions,
-      reach: m.total_reach,
-    }));
-  };
-
-  const prepareEngagementData = () => {
-    const platformData: { [key: string]: { likes: number; comments: number; shares: number; saves: number } } = {};
-
-    metrics.forEach((m) => {
-      if (!platformData[m.platform]) {
-        platformData[m.platform] = { likes: 0, comments: 0, shares: 0, saves: 0 };
-      }
-      platformData[m.platform].likes += m.total_likes || 0;
-      platformData[m.platform].comments += m.total_comments || 0;
-      platformData[m.platform].shares += m.total_shares || 0;
-      platformData[m.platform].saves += m.total_saves || 0;
-    });
-
-    return Object.entries(platformData).map(([platform, data]) => ({
-      platform,
-      ...data,
-    }));
-  };
-
-  if (userLoading || loading) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
   }
 
-  const kpis = calculateKPIs();
-  const chartData = prepareChartData();
-  const engagementData = prepareEngagementData();
-
   return (
-    <div className="container py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-4">Analytics</h1>
-
+    <div className="space-y-6 p-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Analytics</h1>
+          <p className="text-gray-500 mt-1">
+            Track your social media performance
+          </p>
+        </div>
         <div className="flex gap-2">
-          {(['7', '30', '90'] as DateRangeOption[]).map((range) => (
+          {[7, 30, 90].map((d) => (
             <Button
-              key={range}
-              variant={dateRange === range ? 'default' : 'outline'}
-              onClick={() => setDateRange(range)}
+              key={d}
+              variant={period === d ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setPeriod(d)}
             >
-              Last {range} Days
+              {d}d
             </Button>
           ))}
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Impressions</CardTitle>
+            <CardDescription>Total Impressions</CardDescription>
+            <CardTitle className="text-2xl">
+              {totalImpressions.toLocaleString()}
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{kpis.totalImpressions.toLocaleString()}</div>
-          </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Reach</CardTitle>
+            <CardDescription>Total Reach</CardDescription>
+            <CardTitle className="text-2xl">
+              {totalReach.toLocaleString()}
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{kpis.totalReach.toLocaleString()}</div>
-          </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Avg Engagement Rate</CardTitle>
+            <CardDescription>Avg Engagement Rate</CardDescription>
+            <CardTitle className="text-2xl">
+              {(avgEngagement * 100).toFixed(2)}%
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{kpis.avgEngagementRate}%</div>
-          </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Follower Growth</CardTitle>
+            <CardDescription>Follower Growth</CardDescription>
+            <CardTitle className="text-2xl">
+              {followerGrowth >= 0 ? '+' : ''}
+              {followerGrowth.toLocaleString()}
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${kpis.followerGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {kpis.followerGrowth >= 0 ? '+' : ''}{kpis.followerGrowth.toLocaleString()}
-            </div>
-          </CardContent>
         </Card>
       </div>
 
-      {/* Impressions and Reach Chart */}
+      {/* Charts */}
       {chartData.length > 0 && (
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Impressions & Reach Trend</CardTitle>
-            <CardDescription>Daily metrics over the selected period</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="impressions" stroke="#3b82f6" dot={false} />
-                <Line type="monotone" dataKey="reach" stroke="#8b5cf6" dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Impressions & Reach</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="impressions"
+                    stroke="#8884d8"
+                    strokeWidth={2}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="reach"
+                    stroke="#82ca9d"
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Engagement by Platform</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={engagementData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="platform" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="likes" fill="#8884d8" />
+                  <Bar dataKey="comments" fill="#82ca9d" />
+                  <Bar dataKey="shares" fill="#ffc658" />
+                  <Bar dataKey="saves" fill="#ff7300" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
-      {/* Engagement Breakdown Chart */}
-      {engagementData.length > 0 && (
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Engagement Breakdown by Platform</CardTitle>
-            <CardDescription>Aggregated engagement metrics</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={engagementData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="platform" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="likes" stackId="a" fill="#ef4444" />
-                <Bar dataKey="comments" stackId="a" fill="#f59e0b" />
-                <Bar dataKey="shares" stackId="a" fill="#10b981" />
-                <Bar dataKey="saves" stackId="a" fill="#3b82f6" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Competitor Comparison */}
-      {competitors.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Competitor Comparison</CardTitle>
-            <CardDescription>Latest competitor metrics and engagement rates</CardDescription>
-          </CardHeader>
-          <CardContent>
+      {/* Competitors */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Competitor Tracking</CardTitle>
+          <CardDescription>
+            Monitor competitor performance across platforms
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {competitors.length === 0 ? (
+            <p className="text-center text-gray-500">
+              No competitors tracked yet.
+            </p>
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Platform</TableHead>
-                  <TableHead>Handle</TableHead>
+                  <TableHead>Instagram</TableHead>
+                  <TableHead>LinkedIn</TableHead>
                   <TableHead>Followers</TableHead>
-                  <TableHead>Avg Engagement Rate</TableHead>
-                  <TableHead>Last Checked</TableHead>
+                  <TableHead>Avg Engagement</TableHead>
+                  <TableHead>Notes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {competitors.map((competitor) => (
-                  <TableRow key={competitor.id}>
-                    <TableCell className="font-medium">{competitor.name}</TableCell>
-                    <TableCell>{competitor.platform}</TableCell>
-                    <TableCell>{competitor.handle}</TableCell>
-                    <TableCell>{competitor.follower_count.toLocaleString()}</TableCell>
-                    <TableCell>{competitor.avg_engagement_rate.toFixed(2)}%</TableCell>
-                    <TableCell>{formatRelativeTime(competitor.last_checked_at)}</TableCell>
-                  </TableRow>
-                ))}
+                {competitors.map((competitor) => {
+                  const latestMetric = getLatestCompetitorMetric(competitor.id);
+                  return (
+                    <TableRow key={competitor.id}>
+                      <TableCell className="font-medium">
+                        {competitor.name}
+                      </TableCell>
+                      <TableCell>
+                        {competitor.instagram_handle || '—'}
+                      </TableCell>
+                      <TableCell>
+                        {competitor.linkedin_page_url ? (
+                          <a
+                            href={competitor.linkedin_page_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline truncate block max-w-[200px]"
+                          >
+                            View
+                          </a>
+                        ) : (
+                          '—'
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {latestMetric
+                          ? (latestMetric.follower_count || 0).toLocaleString()
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        {latestMetric
+                          ? ((latestMetric.avg_engagement_rate || 0) * 100).toFixed(1) + '%'
+                          : '—'}
+                      </TableCell>
+                      <TableCell className="max-w-[200px] truncate">
+                        {competitor.notes || '—'}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-      )}
-
-      {metrics.length === 0 && (
-        <Card className="bg-muted/50">
-          <CardHeader>
-            <CardTitle>No Data Available</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">No analytics data available for the selected period.</p>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
