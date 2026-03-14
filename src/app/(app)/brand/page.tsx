@@ -9,24 +9,36 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Loader2, Palette, Type, MessageSquare, Target, Hash, Sparkles } from 'lucide-react';
 
 interface BrandKit {
   id: string;
   workspace_id: string;
   brand_name: string;
   tagline: string | null;
-  logo_url: string | null;
-  primary_colors: string[];
-  secondary_colors: string[];
-  fonts: string[];
-  tone_of_voice: string;
-  guidelines_url: string | null;
-  do_examples: string[];
-  dont_examples: string[];
-  notes: string | null;
-  created_at?: string;
-  updated_at?: string;
+  brand_voice: string | null;
+  brand_voice_description: string | null;
+  primary_color: string | null;
+  secondary_color: string | null;
+  accent_color: string | null;
+  background_color: string | null;
+  text_color: string | null;
+  font_primary: string | null;
+  font_secondary: string | null;
+  logo_light_id: string | null;
+  logo_dark_id: string | null;
+  logo_icon_id: string | null;
+  watermark_id: string | null;
+  target_audience: string | null;
+  dos: string[] | null;
+  donts: string[] | null;
+  sample_captions: string[] | null;
+  hashtag_bank: Record<string, string[]> | null;
+  emoji_style: string | null;
+  cta_phrases: string[] | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export default function BrandPage() {
@@ -78,20 +90,27 @@ export default function BrandPage() {
         .update({
           brand_name: formData.brand_name,
           tagline: formData.tagline,
-          primary_colors: formData.primary_colors,
-          secondary_colors: formData.secondary_colors,
-          fonts: formData.fonts,
-          tone_of_voice: formData.tone_of_voice,
-          guidelines_url: formData.guidelines_url,
-          do_examples: formData.do_examples,
-          dont_examples: formData.dont_examples,
-          notes: formData.notes,
+          brand_voice: formData.brand_voice,
+          brand_voice_description: formData.brand_voice_description,
+          primary_color: formData.primary_color,
+          secondary_color: formData.secondary_color,
+          accent_color: formData.accent_color,
+          background_color: formData.background_color,
+          text_color: formData.text_color,
+          font_primary: formData.font_primary,
+          font_secondary: formData.font_secondary,
+          target_audience: formData.target_audience,
+          dos: formData.dos,
+          donts: formData.donts,
+          sample_captions: formData.sample_captions,
+          emoji_style: formData.emoji_style,
+          cta_phrases: formData.cta_phrases,
         })
         .eq('id', brandKit.id);
 
       if (error) throw error;
 
-      setBrandKit(formData as BrandKit);
+      setBrandKit({ ...brandKit, ...formData } as BrandKit);
       setEditing(false);
     } catch (error) {
       console.error('Error saving brand kit:', error);
@@ -123,6 +142,7 @@ export default function BrandPage() {
     );
   }
 
+  // --- EDIT MODE ---
   if (editing && isAdmin) {
     return (
       <div className="container py-8">
@@ -144,7 +164,6 @@ export default function BrandPage() {
                   onChange={(e) => setFormData({ ...formData, brand_name: e.target.value })}
                 />
               </div>
-
               <div>
                 <Label htmlFor="tagline">Tagline</Label>
                 <Input
@@ -153,25 +172,107 @@ export default function BrandPage() {
                   onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
                 />
               </div>
-
               <div>
-                <Label htmlFor="primary_colors">Primary Colors (comma-separated hex codes)</Label>
-                <Input
-                  id="primary_colors"
-                  value={(formData.primary_colors || []).join(', ')}
-                  onChange={(e) => setFormData({ ...formData, primary_colors: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-                  placeholder="#1a1a1a, #ffffff"
+                <Label htmlFor="target_audience">Target Audience</Label>
+                <Textarea
+                  id="target_audience"
+                  value={formData.target_audience || ''}
+                  onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
+                  rows={3}
                 />
               </div>
+            </CardContent>
+          </Card>
 
+          <Card>
+            <CardHeader>
+              <CardTitle>Brand Colors</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="secondary_colors">Secondary Colors (comma-separated hex codes)</Label>
-                <Input
-                  id="secondary_colors"
-                  value={(formData.secondary_colors || []).join(', ')}
-                  onChange={(e) => setFormData({ ...formData, secondary_colors: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-                  placeholder="#666666, #cccccc"
-                />
+                <Label htmlFor="primary_color">Primary Color</Label>
+                <div className="flex gap-2 items-center mt-1">
+                  <input
+                    type="color"
+                    value={formData.primary_color || '#000000'}
+                    onChange={(e) => setFormData({ ...formData, primary_color: e.target.value })}
+                    className="h-10 w-14 rounded border cursor-pointer"
+                  />
+                  <Input
+                    id="primary_color"
+                    value={formData.primary_color || ''}
+                    onChange={(e) => setFormData({ ...formData, primary_color: e.target.value })}
+                    placeholder="#2563eb"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="secondary_color">Secondary Color</Label>
+                <div className="flex gap-2 items-center mt-1">
+                  <input
+                    type="color"
+                    value={formData.secondary_color || '#000000'}
+                    onChange={(e) => setFormData({ ...formData, secondary_color: e.target.value })}
+                    className="h-10 w-14 rounded border cursor-pointer"
+                  />
+                  <Input
+                    id="secondary_color"
+                    value={formData.secondary_color || ''}
+                    onChange={(e) => setFormData({ ...formData, secondary_color: e.target.value })}
+                    placeholder="#1e40af"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="accent_color">Accent Color</Label>
+                <div className="flex gap-2 items-center mt-1">
+                  <input
+                    type="color"
+                    value={formData.accent_color || '#000000'}
+                    onChange={(e) => setFormData({ ...formData, accent_color: e.target.value })}
+                    className="h-10 w-14 rounded border cursor-pointer"
+                  />
+                  <Input
+                    id="accent_color"
+                    value={formData.accent_color || ''}
+                    onChange={(e) => setFormData({ ...formData, accent_color: e.target.value })}
+                    placeholder="#f59e0b"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="background_color">Background Color</Label>
+                <div className="flex gap-2 items-center mt-1">
+                  <input
+                    type="color"
+                    value={formData.background_color || '#ffffff'}
+                    onChange={(e) => setFormData({ ...formData, background_color: e.target.value })}
+                    className="h-10 w-14 rounded border cursor-pointer"
+                  />
+                  <Input
+                    id="background_color"
+                    value={formData.background_color || ''}
+                    onChange={(e) => setFormData({ ...formData, background_color: e.target.value })}
+                    placeholder="#ffffff"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="text_color">Text Color</Label>
+                <div className="flex gap-2 items-center mt-1">
+                  <input
+                    type="color"
+                    value={formData.text_color || '#000000'}
+                    onChange={(e) => setFormData({ ...formData, text_color: e.target.value })}
+                    className="h-10 w-14 rounded border cursor-pointer"
+                  />
+                  <Input
+                    id="text_color"
+                    value={formData.text_color || ''}
+                    onChange={(e) => setFormData({ ...formData, text_color: e.target.value })}
+                    placeholder="#111827"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -180,14 +281,23 @@ export default function BrandPage() {
             <CardHeader>
               <CardTitle>Typography</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="fonts">Fonts (comma-separated)</Label>
+                <Label htmlFor="font_primary">Primary Font</Label>
                 <Input
-                  id="fonts"
-                  value={(formData.fonts || []).join(', ')}
-                  onChange={(e) => setFormData({ ...formData, fonts: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-                  placeholder="Inter, Playfair Display"
+                  id="font_primary"
+                  value={formData.font_primary || ''}
+                  onChange={(e) => setFormData({ ...formData, font_primary: e.target.value })}
+                  placeholder="Inter"
+                />
+              </div>
+              <div>
+                <Label htmlFor="font_secondary">Secondary Font</Label>
+                <Input
+                  id="font_secondary"
+                  value={formData.font_secondary || ''}
+                  onChange={(e) => setFormData({ ...formData, font_secondary: e.target.value })}
+                  placeholder="Playfair Display"
                 />
               </div>
             </CardContent>
@@ -195,53 +305,76 @@ export default function BrandPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Tone of Voice</CardTitle>
+              <CardTitle>Brand Voice</CardTitle>
             </CardHeader>
-            <CardContent>
-              <Textarea
-                value={formData.tone_of_voice || ''}
-                onChange={(e) => setFormData({ ...formData, tone_of_voice: e.target.value })}
-                rows={4}
-              />
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="brand_voice">Voice Style</Label>
+                <Input
+                  id="brand_voice"
+                  value={formData.brand_voice || ''}
+                  onChange={(e) => setFormData({ ...formData, brand_voice: e.target.value })}
+                  placeholder="professional, friendly, authoritative..."
+                />
+              </div>
+              <div>
+                <Label htmlFor="brand_voice_description">Voice Description</Label>
+                <Textarea
+                  id="brand_voice_description"
+                  value={formData.brand_voice_description || ''}
+                  onChange={(e) => setFormData({ ...formData, brand_voice_description: e.target.value })}
+                  rows={4}
+                />
+              </div>
+              <div>
+                <Label htmlFor="emoji_style">Emoji Style</Label>
+                <Input
+                  id="emoji_style"
+                  value={formData.emoji_style || ''}
+                  onChange={(e) => setFormData({ ...formData, emoji_style: e.target.value })}
+                  placeholder="moderate, minimal, heavy..."
+                />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Brand Guidelines URL</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Input
-                value={formData.guidelines_url || ''}
-                onChange={(e) => setFormData({ ...formData, guidelines_url: e.target.value })}
-                placeholder="https://..."
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Do Examples</CardTitle>
+              <CardTitle>Do&apos;s</CardTitle>
             </CardHeader>
             <CardContent>
               <Textarea
-                value={(formData.do_examples || []).join('\n')}
-                onChange={(e) => setFormData({ ...formData, do_examples: e.target.value.split('\n').filter(Boolean) })}
+                value={(formData.dos || []).join('\n')}
+                onChange={(e) => setFormData({ ...formData, dos: e.target.value.split('\n').filter(Boolean) })}
                 placeholder="Enter one example per line"
-                rows={4}
+                rows={5}
               />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Don't Examples</CardTitle>
+              <CardTitle>Don&apos;ts</CardTitle>
             </CardHeader>
             <CardContent>
               <Textarea
-                value={(formData.dont_examples || []).join('\n')}
-                onChange={(e) => setFormData({ ...formData, dont_examples: e.target.value.split('\n').filter(Boolean) })}
+                value={(formData.donts || []).join('\n')}
+                onChange={(e) => setFormData({ ...formData, donts: e.target.value.split('\n').filter(Boolean) })}
                 placeholder="Enter one example per line"
+                rows={5}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Sample Captions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={(formData.sample_captions || []).join('\n')}
+                onChange={(e) => setFormData({ ...formData, sample_captions: e.target.value.split('\n').filter(Boolean) })}
+                placeholder="Enter one caption per line"
                 rows={4}
               />
             </CardContent>
@@ -249,12 +382,13 @@ export default function BrandPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Notes</CardTitle>
+              <CardTitle>CTA Phrases</CardTitle>
             </CardHeader>
             <CardContent>
               <Textarea
-                value={formData.notes || ''}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                value={(formData.cta_phrases || []).join('\n')}
+                onChange={(e) => setFormData({ ...formData, cta_phrases: e.target.value.split('\n').filter(Boolean) })}
+                placeholder="Enter one CTA phrase per line"
                 rows={4}
               />
             </CardContent>
@@ -265,7 +399,7 @@ export default function BrandPage() {
               {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Changes
             </Button>
-            <Button variant="outline" onClick={() => setEditing(false)}>
+            <Button variant="outline" onClick={() => { setEditing(false); setFormData(brandKit); }}>
               Cancel
             </Button>
           </div>
@@ -274,149 +408,242 @@ export default function BrandPage() {
     );
   }
 
+  // --- VIEW MODE ---
+  const colorSwatches = [
+    { label: 'Primary', value: brandKit.primary_color },
+    { label: 'Secondary', value: brandKit.secondary_color },
+    { label: 'Accent', value: brandKit.accent_color },
+    { label: 'Background', value: brandKit.background_color },
+    { label: 'Text', value: brandKit.text_color },
+  ].filter(c => c.value);
+
   return (
     <div className="container py-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Brand Kit</h1>
+        <div>
+          <h1 className="text-3xl font-bold">{brandKit.brand_name}</h1>
+          {brandKit.tagline && <p className="text-muted-foreground mt-1">{brandKit.tagline}</p>}
+        </div>
         {isAdmin && (
           <Button onClick={() => setEditing(true)}>Edit Brand Kit</Button>
         )}
       </div>
 
-      <div className="grid gap-6">
-        {/* Brand Logo and Basic Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Brand Information</CardTitle>
-            <CardDescription>{brandKit.tagline || 'No tagline set'}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label className="text-base font-semibold">Brand Name</Label>
-              <p className="text-lg">{brandKit.brand_name}</p>
-            </div>
-          </CardContent>
-        </Card>
+      <Tabs defaultValue="identity" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="identity" className="flex items-center gap-1.5">
+            <Palette className="h-4 w-4" /> Identity
+          </TabsTrigger>
+          <TabsTrigger value="voice" className="flex items-center gap-1.5">
+            <MessageSquare className="h-4 w-4" /> Voice
+          </TabsTrigger>
+          <TabsTrigger value="guidelines" className="flex items-center gap-1.5">
+            <Target className="h-4 w-4" /> Guidelines
+          </TabsTrigger>
+          <TabsTrigger value="hashtags" className="flex items-center gap-1.5">
+            <Hash className="h-4 w-4" /> Hashtags
+          </TabsTrigger>
+        </TabsList>
 
-        {/* Color Swatches */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Brand Colors</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label className="text-sm font-medium">Primary Colors</Label>
-              <div className="mt-2 flex flex-wrap gap-3">
-                {(brandKit.primary_colors || []).map((color, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <div className="h-12 w-12 rounded border" style={{ backgroundColor: color }} />
-                    <code className="text-sm text-muted-foreground">{color}</code>
-                  </div>
-                ))}
-                {(!brandKit.primary_colors || brandKit.primary_colors.length === 0) && (
-                  <p className="text-sm text-muted-foreground">No primary colors set</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <Label className="text-sm font-medium">Secondary Colors</Label>
-              <div className="mt-2 flex flex-wrap gap-3">
-                {(brandKit.secondary_colors || []).map((color, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <div className="h-12 w-12 rounded border" style={{ backgroundColor: color }} />
-                    <code className="text-sm text-muted-foreground">{color}</code>
-                  </div>
-                ))}
-                {(!brandKit.secondary_colors || brandKit.secondary_colors.length === 0) && (
-                  <p className="text-sm text-muted-foreground">No secondary colors set</p>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Typography */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Typography</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {(brandKit.fonts || []).length > 0 ? (
-              (brandKit.fonts || []).map((font, idx) => (
-                <div key={idx}>
-                  <Label className="text-sm font-medium">Font {idx + 1}</Label>
-                  <p className="text-base" style={{ fontFamily: font }}>{font}</p>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">No fonts configured</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Tone of Voice */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Tone of Voice</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed">{brandKit.tone_of_voice}</p>
-          </CardContent>
-        </Card>
-
-        {/* Brand Guidelines */}
-        {brandKit.guidelines_url && (
+        {/* IDENTITY TAB */}
+        <TabsContent value="identity" className="space-y-6">
+          {/* Colors */}
           <Card>
             <CardHeader>
-              <CardTitle>Brand Guidelines</CardTitle>
+              <CardTitle className="flex items-center gap-2"><Palette className="h-5 w-5" /> Brand Colors</CardTitle>
             </CardHeader>
             <CardContent>
-              <a href={brandKit.guidelines_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm">
-                {brandKit.guidelines_url}
-              </a>
+              <div className="flex flex-wrap gap-6">
+                {colorSwatches.map((color) => (
+                  <div key={color.label} className="text-center">
+                    <div
+                      className="h-16 w-16 rounded-lg border-2 border-gray-200 shadow-sm mx-auto"
+                      style={{ backgroundColor: color.value || '#ccc' }}
+                    />
+                    <p className="text-sm font-medium mt-2">{color.label}</p>
+                    <code className="text-xs text-muted-foreground">{color.value}</code>
+                  </div>
+                ))}
+                {colorSwatches.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No colors configured</p>
+                )}
+              </div>
             </CardContent>
           </Card>
-        )}
 
-        {/* Do Examples */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Do Examples</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {(brandKit.do_examples || []).map((phrase, idx) => (
-                <Badge key={idx} variant="default" className="bg-green-100 text-green-800 hover:bg-green-200">
-                  {phrase}
-                </Badge>
-              ))}
-              {(!brandKit.do_examples || brandKit.do_examples.length === 0) && (
-                <p className="text-sm text-muted-foreground">No examples added</p>
+          {/* Typography */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Type className="h-5 w-5" /> Typography</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {brandKit.font_primary && (
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Primary Font</Label>
+                  <p className="text-xl" style={{ fontFamily: brandKit.font_primary }}>
+                    {brandKit.font_primary}
+                  </p>
+                </div>
               )}
-            </div>
-          </CardContent>
-        </Card>
+              {brandKit.font_secondary && (
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Secondary Font</Label>
+                  <p className="text-xl" style={{ fontFamily: brandKit.font_secondary }}>
+                    {brandKit.font_secondary}
+                  </p>
+                </div>
+              )}
+              {!brandKit.font_primary && !brandKit.font_secondary && (
+                <p className="text-sm text-muted-foreground">No fonts configured</p>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* Don't Examples */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Don't Examples</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {(brandKit.dont_examples || []).map((phrase, idx) => (
-                <Badge key={idx} variant="default" className="bg-red-100 text-red-800 hover:bg-red-200">
-                  {phrase}
-                </Badge>
-              ))}
-              {(!brandKit.dont_examples || brandKit.dont_examples.length === 0) && (
-                <p className="text-sm text-muted-foreground">No examples added</p>
+          {/* Target Audience */}
+          {brandKit.target_audience && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Target className="h-5 w-5" /> Target Audience</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm leading-relaxed">{brandKit.target_audience}</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* VOICE TAB */}
+        <TabsContent value="voice" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Brand Voice</CardTitle>
+              {brandKit.brand_voice && (
+                <CardDescription>
+                  <Badge variant="secondary" className="capitalize">{brandKit.brand_voice}</Badge>
+                  {brandKit.emoji_style && (
+                    <Badge variant="outline" className="ml-2">Emoji: {brandKit.emoji_style}</Badge>
+                  )}
+                </CardDescription>
               )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardHeader>
+            <CardContent>
+              {brandKit.brand_voice_description ? (
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{brandKit.brand_voice_description}</p>
+              ) : (
+                <p className="text-sm text-muted-foreground">No voice description set</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Sample Captions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5" /> Sample Captions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(brandKit.sample_captions || []).length > 0 ? (
+                <div className="space-y-3">
+                  {(brandKit.sample_captions || []).map((caption, idx) => (
+                    <div key={idx} className="p-3 bg-muted rounded-lg text-sm italic">
+                      &ldquo;{caption}&rdquo;
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No sample captions added yet</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* CTA Phrases */}
+          <Card>
+            <CardHeader>
+              <CardTitle>CTA Phrases</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {(brandKit.cta_phrases || []).map((phrase, idx) => (
+                  <Badge key={idx} variant="secondary">{phrase}</Badge>
+                ))}
+                {(!brandKit.cta_phrases || brandKit.cta_phrases.length === 0) && (
+                  <p className="text-sm text-muted-foreground">No CTA phrases added</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* GUIDELINES TAB */}
+        <TabsContent value="guidelines" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-green-700">Do&apos;s</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(brandKit.dos || []).length > 0 ? (
+                <ul className="space-y-2">
+                  {(brandKit.dos || []).map((item, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm">
+                      <span className="text-green-600 mt-0.5">&#10003;</span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">No guidelines added</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-red-700">Don&apos;ts</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(brandKit.donts || []).length > 0 ? (
+                <ul className="space-y-2">
+                  {(brandKit.donts || []).map((item, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm">
+                      <span className="text-red-600 mt-0.5">&#10007;</span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">No guidelines added</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* HASHTAGS TAB */}
+        <TabsContent value="hashtags" className="space-y-6">
+          {brandKit.hashtag_bank && Object.keys(brandKit.hashtag_bank).length > 0 ? (
+            Object.entries(brandKit.hashtag_bank).map(([category, tags]) => (
+              <Card key={category}>
+                <CardHeader>
+                  <CardTitle className="capitalize">{category}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {(tags || []).map((tag, idx) => (
+                      <Badge key={idx} variant="outline" className="text-blue-700">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            <Card>
+              <CardContent className="py-8">
+                <p className="text-sm text-muted-foreground text-center">No hashtag bank configured</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
