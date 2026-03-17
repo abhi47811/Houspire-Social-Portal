@@ -91,6 +91,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Deadlines cron error:", error);
+    const { alertCronFailure } = await import("@/lib/cron-alert");
+    await alertCronFailure("deadlines", error);
     return NextResponse.json({ error: "Failed to run deadlines cron" }, { status: 500 });
   }
 }

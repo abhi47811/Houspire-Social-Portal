@@ -143,6 +143,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Metrics cron error:", error);
+    const { alertCronFailure } = await import("@/lib/cron-alert");
+    await alertCronFailure("metrics", error);
     return NextResponse.json({ error: "Failed to run metrics cron" }, { status: 500 });
   }
 }

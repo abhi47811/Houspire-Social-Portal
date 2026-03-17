@@ -238,7 +238,7 @@ export default function HashtagsPage() {
     toast.success('Hashtags copied to clipboard');
   };
 
-  const isAdmin = user?.user_metadata?.role === 'admin';
+  const isAdmin = user?.role === 'admin';
 
   if (loading) {
     return (

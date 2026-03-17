@@ -206,7 +206,7 @@ export default function TemplatesPage() {
     }
   };
 
-  const isAdmin = user?.user_metadata?.role === 'admin';
+  const isAdmin = user?.role === 'admin';
 
   if (loading) {
     return (

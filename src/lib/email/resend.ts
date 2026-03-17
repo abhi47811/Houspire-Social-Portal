@@ -15,19 +15,23 @@ export function getResendClient(): Resend {
 const FROM = process.env.RESEND_FROM_EMAIL || "Houspire <notifications@houspire.ai>";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://houspire-social-portal.vercel.app";
 
-export type EmailType = "task_assigned" | "deadline_warning" | "publish_success" | "status_changed";
+export type EmailType = "task_assigned" | "deadline_warning" | "publish_success" | "status_changed" | "cron_failure";
 
 interface EmailPayload {
   to: string;
   type: EmailType;
   data: {
     recipientName?: string;
-    taskTitle: string;
+    taskTitle?: string;
     taskId?: string;
     taskStatus?: string;
     platform?: string;
     actionUrl?: string;
     extra?: string;
+    // cron_failure fields
+    cronName?: string;
+    errorMessage?: string;
+    timestamp?: string;
   };
 }
 
@@ -86,6 +90,12 @@ export async function sendEmail(payload: EmailPayload): Promise<void> {
       subject = `Status update: ${data.taskTitle}`;
       bodyHtml = `Hi ${name},<br><br>The task <strong>${data.taskTitle}</strong> status has changed to <strong>${data.taskStatus}</strong>.${data.extra ? `<br><br>${data.extra}` : ""}`;
       ctaLabel = "View Task";
+      break;
+
+    case "cron_failure":
+      subject = `🚨 Cron job failed: ${data.cronName || "unknown"}`;
+      bodyHtml = `A scheduled cron job has failed and requires attention.<br><br><strong>Job:</strong> ${data.cronName}<br><strong>Time:</strong> ${data.timestamp || new Date().toISOString()}<br><strong>Error:</strong><br><code style="background:#f5f5f5;padding:8px;display:block;margin-top:8px;border-radius:4px">${data.errorMessage}</code>`;
+      ctaLabel = "View Automations";
       break;
   }
 

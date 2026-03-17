@@ -114,7 +114,7 @@ export function useUser(): UseUserReturn {
         const smUser = await fetchSmUserREST(session.user.id, session.access_token);
         if (!cancelled) {
           if (smUser) {
-            console.log(`[useUser ${BUILD_VERSION}] loaded: ${smUser.full_name}, role: ${smUser.role}`);
+            console.log(`[useUser ${BUILD_VERSION}] loaded: ${smUser.name}, role: ${smUser.role}`);
           } else {
             console.warn(`[useUser ${BUILD_VERSION}] no sm_user for ${session.user.id}`);
           }

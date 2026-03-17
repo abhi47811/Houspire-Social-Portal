@@ -152,7 +152,7 @@ export default function SettingsPage() {
       setSavingNotifications(true);
       const { error } = await supabase
         .from("sm_users")
-        .update({ notification_prefs: notificationPrefs })
+        .update({ notification_prefs: notificationPrefs as import("@/lib/supabase/database.types").Json })
         .eq("id", user.id);
 
       if (error) throw error;

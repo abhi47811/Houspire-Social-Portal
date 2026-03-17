@@ -141,7 +141,7 @@ export default function QueuePage() {
     );
   };
 
-  const isAdmin = user?.user_metadata?.role === 'admin';
+  const isAdmin = user?.role === 'admin';
 
   // Group slots by day
   const slotsByDay: Record<number, QueueSlot[]> = {};

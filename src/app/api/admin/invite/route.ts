@@ -5,7 +5,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 export async function POST(request: NextRequest) {
   try {
     // Verify the caller is an authenticated admin
-    const serverSupabase = createServerSupabase();
+    const serverSupabase = await createServerSupabase();
     const { data: { user }, error: authError } = await serverSupabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

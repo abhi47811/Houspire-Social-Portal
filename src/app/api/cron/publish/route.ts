@@ -180,6 +180,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ published: results.filter((r) => r.status === "published").length, tasks: results });
   } catch (error) {
     console.error("Publish cron error:", error);
+    const { alertCronFailure } = await import("@/lib/cron-alert");
+    await alertCronFailure("publish", error);
     return NextResponse.json({ error: "Failed to run publish cron" }, { status: 500 });
   }
 }
