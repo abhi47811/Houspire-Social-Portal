@@ -62,12 +62,13 @@ interface SmTemplate {
 const CATEGORIES = ['all', 'reel', 'carousel', 'story', 'post', 'poll'];
 const PLATFORMS = ['instagram', 'linkedin', 'twitter', 'facebook', 'tiktok'];
 
+// Use full class names so Tailwind includes them in the build
 const PLATFORM_COLORS: Record<string, string> = {
-  instagram: 'pink',
-  linkedin: 'blue',
-  twitter: 'sky',
-  facebook: 'indigo',
-  tiktok: 'purple',
+  instagram: 'bg-pink-100 text-pink-800',
+  linkedin: 'bg-blue-100 text-blue-800',
+  twitter: 'bg-sky-100 text-sky-800',
+  facebook: 'bg-indigo-100 text-indigo-800',
+  tiktok: 'bg-purple-100 text-purple-800',
 };
 
 export default function TemplatesPage() {
@@ -421,8 +422,7 @@ export default function TemplatesPage() {
               <CardContent className="space-y-3">
                 <div className="flex flex-wrap gap-2">
                   <Badge
-                    variant="secondary"
-                    className={`bg-${PLATFORM_COLORS[template.platform] || 'gray'}-100`}
+                    className={PLATFORM_COLORS[template.platform] || 'bg-gray-100 text-gray-800'}
                   >
                     {template.platform}
                   </Badge>
@@ -462,7 +462,7 @@ export default function TemplatesPage() {
                   <div>
                     <h3 className="font-semibold mb-2">Platform</h3>
                     <Badge
-                      className={`bg-${PLATFORM_COLORS[selectedTemplate.platform] || 'gray'}-100`}
+                      className={PLATFORM_COLORS[selectedTemplate.platform] || 'bg-gray-100 text-gray-800'}
                     >
                       {selectedTemplate.platform}
                     </Badge>

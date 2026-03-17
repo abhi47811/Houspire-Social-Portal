@@ -1,10 +1,10 @@
 {
   "crons": [
-    { "path": "/api/cron/publish?secret=houspire-cron-2024", "schedule": "0 8 * * *" },
-    { "path": "/api/cron/deadlines?secret=houspire-cron-2024", "schedule": "0 9 * * *" },
-    { "path": "/api/cron/metrics?secret=houspire-cron-2024", "schedule": "0 0 * * *" },
-    { "path": "/api/cron/aggregate-metrics?secret=houspire-cron-2024", "schedule": "0 1 * * *" },
-    { "path": "/api/cron/hashtag-analytics?secret=houspire-cron-2024", "schedule": "0 2 * * *" },
-    { "path": "/api/cron/sheets-sync?secret=houspire-cron-2024", "schedule": "0 3 * * *" }
+    { "path": "/api/cron/publish",           "schedule": "0 8 * * *" },
+    { "path": "/api/cron/deadlines",         "schedule": "0 9 * * *" },
+    { "path": "/api/cron/metrics",           "schedule": "0 0 * * *" },
+    { "path": "/api/cron/aggregate-metrics", "schedule": "0 1 * * *" },
+    { "path": "/api/cron/hashtag-analytics", "schedule": "0 2 * * *" },
+    { "path": "/api/cron/sheets-sync",       "schedule": "0 3 * * *" }
   ]
 }

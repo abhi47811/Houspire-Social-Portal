@@ -48,7 +48,8 @@ async function sendPublishEmail(
 }
 
 export async function GET(request: NextRequest) {
-  const secret = request.nextUrl.searchParams.get("secret");
+  const authHeader = request.headers.get("authorization");
+  const secret = authHeader?.replace("Bearer ", "") ?? request.nextUrl.searchParams.get("secret");
   if (secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -110,7 +111,22 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // --- Update DB ---
+      // --- Determine if at least one platform published successfully ---
+      const igRequired = task.platform === "instagram" || task.platform === "both";
+      const liRequired = task.platform === "linkedin" || task.platform === "both";
+      const igSuccess = !igRequired || !!ig_post_id;
+      const liSuccess = !liRequired || !!linkedin_urn;
+      const atLeastOneSuccess = ig_post_id || linkedin_urn;
+      const allFailed = igRequired && !ig_post_id && liRequired && !linkedin_urn;
+
+      if (allFailed && errors.length > 0) {
+        // Both platforms failed — mark as failed, don't change status
+        console.error(`All platforms failed for task ${task.id}:`, errors);
+        results.push({ id: task.id, status: "failed", error: errors.join("; ") });
+        continue;
+      }
+
+      // --- Update DB (at least one platform succeeded) ---
       const { error: updateError } = await supabase
         .from("sm_tasks")
         .update({
@@ -133,6 +149,7 @@ export async function GET(request: NextRequest) {
             auto_published: true,
             ig_post_id: ig_post_id || null,
             linkedin_urn: linkedin_urn || null,
+            partial_failure: errors.length > 0,
             errors: errors.length ? errors : undefined,
           },
         });
