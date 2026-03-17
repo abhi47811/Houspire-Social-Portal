@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useUser } from '@/hooks/use-user';
 import {
@@ -44,7 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface SmHashtagSet {
@@ -101,6 +101,38 @@ export default function HashtagsPage() {
     platform: '',
     category: '',
   });
+  const [generatingHashtags, setGeneratingHashtags] = useState(false);
+
+  const suggestHashtagsWithAI = useCallback(async () => {
+    if (!formData.name && !formData.category) return;
+    setGeneratingHashtags(true);
+    try {
+      const res = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "hashtags",
+          context: {
+            topic: formData.name,
+            platform: formData.platform || "instagram",
+            category: formData.category,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Generation failed");
+      // Strip leading # and join with spaces for the textarea
+      const suggested = data.result.trim();
+      setFormData((prev) => ({
+        ...prev,
+        hashtags: prev.hashtags ? `${prev.hashtags} ${suggested}` : suggested,
+      }));
+    } catch (err) {
+      console.error("AI hashtag error:", err);
+    } finally {
+      setGeneratingHashtags(false);
+    }
+  }, [formData.name, formData.category, formData.platform]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -251,7 +283,20 @@ export default function HashtagsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="hashtags">Hashtags *</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="hashtags">Hashtags *</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1 h-7 text-xs"
+                      onClick={suggestHashtagsWithAI}
+                      disabled={generatingHashtags || (!formData.name && !formData.category)}
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      {generatingHashtags ? "Suggesting..." : "AI Suggest"}
+                    </Button>
+                  </div>
                   <Textarea
                     id="hashtags"
                     placeholder="#realestate, #property, #home"

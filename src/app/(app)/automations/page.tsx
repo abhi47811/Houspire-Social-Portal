@@ -14,7 +14,9 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, Plus } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
@@ -24,6 +26,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface Automation {
   id: string;
@@ -52,90 +61,93 @@ interface AutomationRun {
   created_at: string;
 }
 
+const TRIGGER_EVENTS = [
+  { value: 'task_status_changed', label: 'Task Status Changed' },
+  { value: 'task_created', label: 'Task Created' },
+  { value: 'task_assigned', label: 'Task Assigned' },
+  { value: 'task_published', label: 'Task Published' },
+  { value: 'deadline_approaching', label: 'Deadline Approaching' },
+  { value: 'review_requested', label: 'Review Requested' },
+];
+
+const defaultForm = {
+  name: '',
+  description: '',
+  trigger_event: 'task_status_changed',
+  is_active: true,
+};
+
 export default function AutomationsPage() {
   const { user, loading: userLoading } = useUser();
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [automationRuns, setAutomationRuns] = useState<AutomationRun[]>([]);
-  const [selectedAutomation, setSelectedAutomation] =
-    useState<Automation | null>(null);
+  const [selectedAutomation, setSelectedAutomation] = useState<Automation | null>(null);
   const [loading, setLoading] = useState(true);
-  const [updatingAutomations, setUpdatingAutomations] = useState<Set<string>>(
-    new Set()
-  );
+  const [updatingAutomations, setUpdatingAutomations] = useState<Set<string>>(new Set());
+  const [showDialog, setShowDialog] = useState(false);
+  const [editingAutomation, setEditingAutomation] = useState<Automation | null>(null);
+  const [formData, setFormData] = useState(defaultForm);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const supabase = createClient();
   const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     if (userLoading) return;
-
-    const fetchAutomations = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('sm_automations')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        setAutomations(data || []);
-        if ((data || []).length > 0) {
-          setSelectedAutomation(data[0]);
-        }
-      } catch (error) {
-        console.error('Error fetching automations:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchAutomations();
-  }, [userLoading, supabase]);
+  }, [userLoading]);
 
   useEffect(() => {
     if (!selectedAutomation) return;
+    fetchRuns(selectedAutomation.id);
+  }, [selectedAutomation]);
 
-    const fetchRuns = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('sm_automation_runs')
-          .select('*')
-          .eq('automation_id', selectedAutomation.id)
-          .order('created_at', { ascending: false })
-          .limit(50);
-
-        if (error) throw error;
-        setAutomationRuns(data || []);
-      } catch (error) {
-        console.error('Error fetching automation runs:', error);
+  const fetchAutomations = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('sm_automations')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setAutomations(data || []);
+      if ((data || []).length > 0 && !selectedAutomation) {
+        setSelectedAutomation(data[0]);
       }
-    };
+    } catch (error) {
+      console.error('Error fetching automations:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchRuns();
-  }, [selectedAutomation, supabase]);
+  const fetchRuns = async (automationId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('sm_automation_runs')
+        .select('*')
+        .eq('automation_id', automationId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      setAutomationRuns(data || []);
+    } catch (error) {
+      console.error('Error fetching automation runs:', error);
+    }
+  };
 
-  const toggleAutomationActive = async (
-    automationId: string,
-    currentState: boolean
-  ) => {
+  const toggleAutomationActive = async (automationId: string, currentState: boolean) => {
     setUpdatingAutomations((prev) => new Set(prev).add(automationId));
     try {
       const { error } = await supabase
         .from('sm_automations')
         .update({ is_active: !currentState })
         .eq('id', automationId);
-
       if (error) throw error;
       setAutomations((prev) =>
-        prev.map((auto) =>
-          auto.id === automationId
-            ? { ...auto, is_active: !currentState }
-            : auto
-        )
+        prev.map((a) => (a.id === automationId ? { ...a, is_active: !currentState } : a))
       );
       if (selectedAutomation?.id === automationId) {
-        setSelectedAutomation({
-          ...selectedAutomation,
-          is_active: !currentState,
-        });
+        setSelectedAutomation({ ...selectedAutomation, is_active: !currentState });
       }
     } catch (error) {
       console.error('Error updating automation:', error);
@@ -148,15 +160,84 @@ export default function AutomationsPage() {
     }
   };
 
-  const getRunStatus = (run: AutomationRun): string => {
-    return run.success ? 'success' : 'failure';
+  const openCreate = () => {
+    setEditingAutomation(null);
+    setFormData(defaultForm);
+    setShowDialog(true);
   };
 
-  const getRunStatusVariant = (
-    run: AutomationRun
-  ): 'default' | 'destructive' | 'secondary' => {
-    return run.success ? 'default' : 'destructive';
+  const openEdit = (automation: Automation) => {
+    setEditingAutomation(automation);
+    setFormData({
+      name: automation.name,
+      description: automation.description || '',
+      trigger_event: automation.trigger_event,
+      is_active: automation.is_active,
+    });
+    setShowDialog(true);
   };
+
+  const handleSave = async () => {
+    if (!formData.name.trim()) return;
+    setSaving(true);
+    try {
+      if (editingAutomation) {
+        const { error } = await supabase
+          .from('sm_automations')
+          .update({ ...formData, updated_at: new Date().toISOString() })
+          .eq('id', editingAutomation.id);
+        if (error) throw error;
+        setAutomations((prev) =>
+          prev.map((a) => (a.id === editingAutomation.id ? { ...a, ...formData } : a))
+        );
+        if (selectedAutomation?.id === editingAutomation.id) {
+          setSelectedAutomation({ ...selectedAutomation, ...formData });
+        }
+      } else {
+        const { data, error } = await supabase
+          .from('sm_automations')
+          .insert({
+            ...formData,
+            created_by: user?.id,
+            actions: [],
+            trigger_conditions: {},
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        setAutomations((prev) => [data, ...prev]);
+        setSelectedAutomation(data);
+      }
+      setShowDialog(false);
+    } catch (error) {
+      console.error('Save automation error:', error);
+      alert('Failed to save automation');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (automationId: string) => {
+    if (!confirm('Delete this automation? This cannot be undone.')) return;
+    setDeleting(automationId);
+    try {
+      const { error } = await supabase.from('sm_automations').delete().eq('id', automationId);
+      if (error) throw error;
+      setAutomations((prev) => prev.filter((a) => a.id !== automationId));
+      if (selectedAutomation?.id === automationId) {
+        const remaining = automations.filter((a) => a.id !== automationId);
+        setSelectedAutomation(remaining[0] ?? null);
+      }
+    } catch (error) {
+      console.error('Delete automation error:', error);
+      alert('Failed to delete automation');
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const getRunStatusVariant = (run: AutomationRun): 'default' | 'destructive' | 'secondary' =>
+    run.success ? 'default' : 'destructive';
 
   if (userLoading || loading) {
     return (
@@ -168,22 +249,27 @@ export default function AutomationsPage() {
 
   return (
     <div className="container py-8">
-      <div className="mb-8">
+      <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold">Automations</h1>
+        {isAdmin && (
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4 mr-2" /> Create Automation
+          </Button>
+        )}
       </div>
 
       {automations.length === 0 ? (
         <Card className="bg-muted/50">
           <CardHeader>
-            <CardTitle>No Automations</CardTitle>
+            <CardTitle>No Automations Yet</CardTitle>
+            <CardDescription>
+              Automations trigger actions automatically when events happen — like sending a notification when a task is assigned.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground mb-4">
-              You haven&apos;t created any automations yet.
-            </p>
             {isAdmin && (
-              <Button>
-                <Plus className="h-4 w-4 mr-2" /> Create Automation
+              <Button onClick={openCreate}>
+                <Plus className="h-4 w-4 mr-2" /> Create Your First Automation
               </Button>
             )}
           </CardContent>
@@ -199,188 +285,119 @@ export default function AutomationsPage() {
                   key={automation.id}
                   className={`cursor-pointer transition-colors ${
                     selectedAutomation?.id === automation.id
-                      ? 'border-primary bg-accent'
-                      : 'hover:bg-accent/50'
+                      ? 'border-primary ring-1 ring-primary'
+                      : 'hover:border-primary/50'
                   }`}
                   onClick={() => setSelectedAutomation(automation)}
                 >
-                  <CardHeader className="pb-3">
+                  <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <CardTitle className="text-base">
-                          {automation.name}
-                        </CardTitle>
-                        <CardDescription className="text-xs mt-1">
-                          {automation.trigger_event}
-                        </CardDescription>
-                      </div>
-                      {isAdmin && (
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          className="flex items-center gap-2"
-                        >
-                          <Switch
-                            checked={automation.is_active}
-                            onCheckedChange={() =>
-                              toggleAutomationActive(
-                                automation.id,
-                                automation.is_active
-                              )
-                            }
-                            disabled={updatingAutomations.has(automation.id)}
-                          />
-                          {updatingAutomations.has(automation.id) && (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          )}
-                        </div>
-                      )}
+                      <CardTitle className="text-base leading-tight">{automation.name}</CardTitle>
+                      <Switch
+                        checked={automation.is_active}
+                        disabled={updatingAutomations.has(automation.id) || !isAdmin}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleAutomationActive(automation.id, automation.is_active);
+                        }}
+                      />
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <p className="text-sm text-muted-foreground line-clamp-2">
+                    <CardDescription className="text-xs line-clamp-2">
                       {automation.description}
-                    </p>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
                     <div className="flex items-center justify-between">
-                      <Badge
-                        variant={
-                          automation.is_active ? 'default' : 'secondary'
-                        }
-                      >
-                        {automation.is_active ? 'Active' : 'Inactive'}
+                      <Badge variant="secondary" className="text-xs">
+                        {TRIGGER_EVENTS.find((t) => t.value === automation.trigger_event)?.label ||
+                          automation.trigger_event}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
-                        Runs: {automation.run_count}
+                        {automation.run_count} runs
                       </span>
                     </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
-            {isAdmin && (
-              <Button>
-                <Plus className="h-4 w-4 mr-2" /> Create Automation
-              </Button>
-            )}
           </div>
 
-          {/* Automation Detail and Runs */}
+          {/* Selected Automation Detail */}
           {selectedAutomation && (
             <Card>
               <CardHeader>
-                <CardTitle>{selectedAutomation.name}</CardTitle>
-                <CardDescription>
-                  Created {formatDate(selectedAutomation.created_at)}
-                  {selectedAutomation.last_run_at && (
-                    <>
-                      {' '}
-                      &bull; Last run{' '}
-                      {formatRelativeTime(selectedAutomation.last_run_at)}
-                    </>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>{selectedAutomation.name}</CardTitle>
+                    <CardDescription>{selectedAutomation.description}</CardDescription>
+                  </div>
+                  {isAdmin && (
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => openEdit(selectedAutomation)}>
+                        <Pencil className="h-3 w-3 mr-1" /> Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700"
+                        disabled={deleting === selectedAutomation.id}
+                        onClick={() => handleDelete(selectedAutomation.id)}
+                      >
+                        {deleting === selectedAutomation.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                        ) : (
+                          <Trash2 className="h-3 w-3 mr-1" />
+                        )}
+                        Delete
+                      </Button>
+                    </div>
                   )}
-                </CardDescription>
+                </div>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="details" className="w-full">
+                <Tabs defaultValue="details">
                   <TabsList>
                     <TabsTrigger value="details">Details</TabsTrigger>
-                    <TabsTrigger value="runs">
-                      Runs ({automationRuns.length})
-                    </TabsTrigger>
+                    <TabsTrigger value="runs">Run History</TabsTrigger>
                   </TabsList>
 
-                  <TabsContent value="details" className="space-y-4 mt-4">
-                    <div>
-                      <h3 className="font-semibold text-sm mb-1">
-                        Description
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        {selectedAutomation.description}
-                      </p>
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-sm mb-1">
-                        Trigger Event
-                      </h3>
-                      <Badge variant="outline">
-                        {selectedAutomation.trigger_event}
-                      </Badge>
-                    </div>
-
-                    {selectedAutomation.trigger_conditions &&
-                      Object.keys(selectedAutomation.trigger_conditions)
-                        .length > 0 && (
-                        <div>
-                          <h3 className="font-semibold text-sm mb-2">
-                            Conditions
-                          </h3>
-                          <div className="bg-muted p-3 rounded text-xs font-mono overflow-x-auto">
-                            {JSON.stringify(
-                              selectedAutomation.trigger_conditions,
-                              null,
-                              2
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                    {selectedAutomation.actions &&
-                      Object.keys(selectedAutomation.actions).length > 0 && (
-                        <div>
-                          <h3 className="font-semibold text-sm mb-2">
-                            Actions
-                          </h3>
-                          <div className="bg-muted p-3 rounded text-xs font-mono overflow-x-auto">
-                            {JSON.stringify(
-                              selectedAutomation.actions,
-                              null,
-                              2
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                    <div>
-                      <h3 className="font-semibold text-sm mb-1">Status</h3>
-                      <Badge
-                        variant={
-                          selectedAutomation.is_active
-                            ? 'default'
-                            : 'secondary'
-                        }
-                      >
-                        {selectedAutomation.is_active ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-sm mb-1">
-                        Total Runs
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        {selectedAutomation.run_count} execution(s)
-                      </p>
-                    </div>
-
-                    {isAdmin && (
-                      <div className="flex gap-2 mt-6">
-                        <Button variant="outline" size="sm">
-                          Edit
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          Delete
-                        </Button>
+                  <TabsContent value="details" className="mt-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <h3 className="font-semibold mb-1">Trigger Event</h3>
+                        <Badge variant="outline">
+                          {TRIGGER_EVENTS.find((t) => t.value === selectedAutomation.trigger_event)?.label ||
+                            selectedAutomation.trigger_event}
+                        </Badge>
                       </div>
-                    )}
+                      <div>
+                        <h3 className="font-semibold mb-1">Status</h3>
+                        <Badge variant={selectedAutomation.is_active ? 'default' : 'secondary'}>
+                          {selectedAutomation.is_active ? 'Active' : 'Paused'}
+                        </Badge>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold mb-1">Total Runs</h3>
+                        <p className="text-muted-foreground">{selectedAutomation.run_count} execution(s)</p>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold mb-1">Last Run</h3>
+                        <p className="text-muted-foreground">
+                          {selectedAutomation.last_run_at
+                            ? formatRelativeTime(selectedAutomation.last_run_at)
+                            : 'Never'}
+                        </p>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold mb-1">Created</h3>
+                        <p className="text-muted-foreground">{formatDate(selectedAutomation.created_at)}</p>
+                      </div>
+                    </div>
                   </TabsContent>
 
                   <TabsContent value="runs" className="mt-4">
                     {automationRuns.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-4">
-                        No automation runs yet.
-                      </p>
+                      <p className="text-sm text-muted-foreground py-4">No automation runs yet.</p>
                     ) : (
                       <Table>
                         <TableHeader>
@@ -394,21 +411,17 @@ export default function AutomationsPage() {
                         <TableBody>
                           {automationRuns.map((run) => (
                             <TableRow key={run.id}>
-                              <TableCell className="text-sm">
-                                {formatRelativeTime(run.created_at)}
-                              </TableCell>
+                              <TableCell className="text-sm">{formatRelativeTime(run.created_at)}</TableCell>
                               <TableCell>
                                 <Badge variant={getRunStatusVariant(run)}>
-                                  {getRunStatus(run)}
+                                  {run.success ? 'success' : 'failed'}
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-sm">
-                                {run.duration_ms
-                                  ? `${run.duration_ms}ms`
-                                  : '-'}
+                                {run.duration_ms ? `${run.duration_ms}ms` : '–'}
                               </TableCell>
                               <TableCell className="text-xs text-red-600 max-w-xs truncate">
-                                {run.error_message || '-'}
+                                {run.error_message || '–'}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -422,6 +435,66 @@ export default function AutomationsPage() {
           )}
         </div>
       )}
+
+      {/* Create / Edit Dialog */}
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingAutomation ? 'Edit Automation' : 'Create Automation'}</DialogTitle>
+            <DialogDescription>
+              {editingAutomation
+                ? 'Update the automation details below.'
+                : 'Set up a new automation to run when events happen.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="auto-name">Name *</Label>
+              <Input
+                id="auto-name"
+                placeholder="e.g. Notify on task assignment"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="auto-desc">Description</Label>
+              <Input
+                id="auto-desc"
+                placeholder="What does this automation do?"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="auto-trigger">Trigger Event</Label>
+              <select
+                id="auto-trigger"
+                className="w-full border rounded-md px-3 py-2 text-sm mt-1"
+                value={formData.trigger_event}
+                onChange={(e) => setFormData({ ...formData, trigger_event: e.target.value })}
+              >
+                {TRIGGER_EVENTS.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={formData.is_active}
+                onCheckedChange={(v) => setFormData({ ...formData, is_active: v })}
+              />
+              <Label>Active immediately</Label>
+            </div>
+            <Button onClick={handleSave} disabled={saving || !formData.name.trim()} className="w-full">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {editingAutomation ? 'Save Changes' : 'Create Automation'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

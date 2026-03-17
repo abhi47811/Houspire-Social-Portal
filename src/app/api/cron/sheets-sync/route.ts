@@ -1,12 +1,15 @@
 export const dynamic = "force-dynamic";
-import { createServerSupabase } from "@/lib/supabase/server";
-import { NextResponse } from "next/server";
+import { createServiceSupabase } from "@/lib/supabase/service";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const secret = request.nextUrl.searchParams.get("secret");
+  if (secret !== process.env.CRON_SECRET) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
-    const supabase = await createServerSupabase();
+    const supabase = createServiceSupabase();
 
-    // Find tasks that haven't been synced to sheets recently
     const { data: tasks, error } = await supabase
       .from("sm_tasks")
       .select("id, title, status, platform, scheduled_at, published_at, sheets_synced_at")
@@ -16,8 +19,6 @@ export async function GET() {
 
     if (error) throw error;
 
-    // In production, this would sync to Google Sheets via the Sheets API
-    // For now, return a summary
     return NextResponse.json({
       message: "Google Sheets sync placeholder",
       tasks_to_sync: tasks?.length || 0,

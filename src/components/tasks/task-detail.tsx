@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Sparkles } from "lucide-react";
 
 interface TaskDetailProps {
   task: SmTask;
@@ -49,6 +50,10 @@ export function TaskDetail({
 }: TaskDetailProps) {
   const [task, setTask] = useState(initialTask);
   const [title, setTitle] = useState(initialTask.title);
+  const [editCaption, setEditCaption] = useState(initialTask.caption || "");
+  const [editScript, setEditScript] = useState(initialTask.script_body || "");
+  const [savingContent, setSavingContent] = useState(false);
+  const [generatingAI, setGeneratingAI] = useState(false);
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(false);
@@ -58,6 +63,8 @@ export function TaskDetail({
     if (open) {
       setTask(initialTask);
       setTitle(initialTask.title);
+      setEditCaption(initialTask.caption || "");
+      setEditScript(initialTask.script_body || "");
       fetchComments();
       fetchCurrentUser();
     }
@@ -126,6 +133,45 @@ export function TaskDetail({
       setTitle(task.title);
     } else {
       setTask({ ...task, title });
+    }
+  };
+
+  const saveContent = async (field: "caption" | "script_body", value: string) => {
+    setSavingContent(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("sm_tasks")
+      .update({ [field]: value })
+      .eq("id", task.id);
+    if (!error) setTask({ ...task, [field]: value });
+    setSavingContent(false);
+  };
+
+  const generateWithAI = async (type: "caption" | "script") => {
+    setGeneratingAI(true);
+    try {
+      const res = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type,
+          context: {
+            title: task.title,
+            platform: task.platform,
+            category: task.category,
+            existingCaption: type === "caption" ? editCaption : undefined,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Generation failed");
+      if (type === "caption") setEditCaption(data.result);
+      else setEditScript(data.result);
+    } catch (err) {
+      console.error("AI generate error:", err);
+      alert(err instanceof Error ? err.message : "AI generation failed");
+    } finally {
+      setGeneratingAI(false);
     }
   };
 
@@ -258,19 +304,61 @@ export function TaskDetail({
               </Badge>
             </div>
 
-            {/* Script/Caption */}
-            {(task.script_body || task.caption) && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  {task.script_body ? "Script" : "Caption"}
-                </label>
-                <Textarea
-                  value={task.script_body || task.caption || ""}
-                  readOnly
-                  className="resize-none"
-                />
+            {/* Caption */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Caption</label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 h-7 text-xs"
+                  onClick={() => generateWithAI("caption")}
+                  disabled={generatingAI}
+                >
+                  <Sparkles className="h-3 w-3" />
+                  {generatingAI ? "Generating..." : "AI Generate"}
+                </Button>
               </div>
-            )}
+              <Textarea
+                value={editCaption}
+                onChange={(e) => setEditCaption(e.target.value)}
+                className="resize-none min-h-[100px]"
+                placeholder="Write a caption or click AI Generate..."
+              />
+              {editCaption !== (task.caption || "") && (
+                <Button size="sm" onClick={() => saveContent("caption", editCaption)} disabled={savingContent}>
+                  {savingContent ? "Saving..." : "Save Caption"}
+                </Button>
+              )}
+            </div>
+
+            {/* Script */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Script</label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 h-7 text-xs"
+                  onClick={() => generateWithAI("script")}
+                  disabled={generatingAI}
+                >
+                  <Sparkles className="h-3 w-3" />
+                  {generatingAI ? "Generating..." : "AI Generate"}
+                </Button>
+              </div>
+              <Textarea
+                value={editScript}
+                onChange={(e) => setEditScript(e.target.value)}
+                className="resize-none min-h-[100px]"
+                placeholder="Write a script or click AI Generate..."
+              />
+              {editScript !== (task.script_body || "") && (
+                <Button size="sm" onClick={() => saveContent("script_body", editScript)} disabled={savingContent}>
+                  {savingContent ? "Saving..." : "Save Script"}
+                </Button>
+              )}
+            </div>
 
             {/* Owner */}
             {task.current_owner && (

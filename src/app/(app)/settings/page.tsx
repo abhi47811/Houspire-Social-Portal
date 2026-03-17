@@ -85,6 +85,9 @@ export default function SettingsPage() {
   const [loadingTeam, setLoadingTeam] = useState(false);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [inviteRole, setInviteRole] = useState("script_writer");
+  const [inviting, setInviting] = useState(false);
 
   // Initialize profile data
   useEffect(() => {
@@ -174,16 +177,53 @@ export default function SettingsPage() {
   };
 
   const handleInviteMember = async () => {
-    if (!inviteEmail.trim()) return;
+    if (!inviteEmail.trim() || !inviteName.trim()) return;
 
     try {
-      // This would typically call a backend API to send an invite
-      alert(`Invite dialog would send invite to: ${inviteEmail}`);
+      setInviting(true);
+      const res = await fetch("/api/admin/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to invite");
+
+      alert(`Invite sent to ${inviteEmail}! They'll receive an email to set their password.`);
       setInviteEmail("");
+      setInviteName("");
+      setInviteRole("script_writer");
       setShowInviteDialog(false);
+      // Refresh team list
+      const { data: updated } = await supabase.from("sm_users").select("*").order("created_at", { ascending: true });
+      setTeamMembers(updated || []);
     } catch (err) {
       console.error("Error inviting member:", err);
-      alert("Failed to send invite");
+      alert(err instanceof Error ? err.message : "Failed to send invite");
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const handleChangeRole = async (memberId: string, newRole: string) => {
+    try {
+      const { error } = await supabase.from("sm_users").update({ role: newRole }).eq("id", memberId);
+      if (error) throw error;
+      setTeamMembers((prev) => prev.map((m) => m.id === memberId ? { ...m, role: newRole as SmUser["role"] } : m));
+    } catch (err) {
+      console.error("Role update failed:", err);
+      alert("Failed to update role");
+    }
+  };
+
+  const handleToggleActive = async (memberId: string, isActive: boolean) => {
+    try {
+      const { error } = await supabase.from("sm_users").update({ is_active: !isActive }).eq("id", memberId);
+      if (error) throw error;
+      setTeamMembers((prev) => prev.map((m) => m.id === memberId ? { ...m, is_active: !isActive } : m));
+    } catch (err) {
+      console.error("Toggle active failed:", err);
+      alert("Failed to update member status");
     }
   };
 
@@ -389,10 +429,19 @@ export default function SettingsPage() {
                       <DialogHeader>
                         <DialogTitle>Invite Team Member</DialogTitle>
                         <DialogDescription>
-                          Send an invitation to a new team member
+                          They'll receive an email to set their password.
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="invite-name">Full Name</Label>
+                          <Input
+                            id="invite-name"
+                            placeholder="Jane Smith"
+                            value={inviteName}
+                            onChange={(e) => setInviteName(e.target.value)}
+                          />
+                        </div>
                         <div>
                           <Label htmlFor="invite-email">Email Address</Label>
                           <Input
@@ -403,11 +452,26 @@ export default function SettingsPage() {
                             onChange={(e) => setInviteEmail(e.target.value)}
                           />
                         </div>
+                        <div>
+                          <Label htmlFor="invite-role">Role</Label>
+                          <select
+                            id="invite-role"
+                            className="w-full border rounded-md px-3 py-2 text-sm mt-1"
+                            value={inviteRole}
+                            onChange={(e) => setInviteRole(e.target.value)}
+                          >
+                            <option value="script_writer">Script Writer</option>
+                            <option value="reviewer_editor">Reviewer / Editor</option>
+                            <option value="shooter">Shooter</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        </div>
                         <Button
                           onClick={handleInviteMember}
                           className="w-full"
+                          disabled={inviting}
                         >
-                          Send Invite
+                          {inviting ? "Sending..." : "Send Invite"}
                         </Button>
                       </div>
                     </DialogContent>
@@ -461,9 +525,28 @@ export default function SettingsPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Button variant="ghost" size="sm">
-                              Edit
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <select
+                                className="border rounded px-2 py-1 text-xs"
+                                value={member.role}
+                                onChange={(e) => handleChangeRole(member.id, e.target.value)}
+                                disabled={member.auth_user_id === user.auth_user_id}
+                              >
+                                <option value="script_writer">Script Writer</option>
+                                <option value="reviewer_editor">Reviewer / Editor</option>
+                                <option value="shooter">Shooter</option>
+                                <option value="admin">Admin</option>
+                              </select>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className={member.is_active ? "text-red-600 hover:text-red-700" : "text-green-600 hover:text-green-700"}
+                                onClick={() => handleToggleActive(member.id, member.is_active)}
+                                disabled={member.auth_user_id === user.auth_user_id}
+                              >
+                                {member.is_active ? "Deactivate" : "Activate"}
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}

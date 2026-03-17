@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -97,7 +98,13 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-slate-200 text-center">
+          <div className="mt-4 text-center">
+            <Link href="/forgot-password" className="text-sm text-blue-600 hover:underline">
+              Forgot password?
+            </Link>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-slate-200 text-center">
             <p className="text-sm text-slate-600">
               Don't have an account?{" "}
               <span className="text-blue-600 font-medium">Contact your administrator</span>

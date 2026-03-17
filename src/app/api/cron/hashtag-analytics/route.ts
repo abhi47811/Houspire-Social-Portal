@@ -1,12 +1,15 @@
 export const dynamic = "force-dynamic";
-import { createServerSupabase } from "@/lib/supabase/server";
-import { NextResponse } from "next/server";
+import { createServiceSupabase } from "@/lib/supabase/service";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const secret = request.nextUrl.searchParams.get("secret");
+  if (secret !== process.env.CRON_SECRET) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
-    const supabase = await createServerSupabase();
+    const supabase = createServiceSupabase();
 
-    // Fetch active hashtag sets
     const { data: sets, error } = await supabase
       .from("sm_hashtag_sets")
       .select("id, name, hashtags, platform")
@@ -14,8 +17,6 @@ export async function GET() {
 
     if (error) throw error;
 
-    // In production, this would query Instagram/LinkedIn APIs for hashtag performance
-    // For now, return a summary
     return NextResponse.json({
       message: "Hashtag analytics collection placeholder",
       hashtag_sets_to_analyze: sets?.length || 0,
