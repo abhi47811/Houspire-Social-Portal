@@ -37,7 +37,8 @@
     "recharts": "^3.8.0",
     "resend": "^6.9.4",
     "sonner": "^2.0.7",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "vercel": "^50.32.5"
   },
   "devDependencies": {
     "@types/node": "^20",

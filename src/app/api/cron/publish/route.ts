@@ -65,10 +65,22 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
-    const igToken = process.env.INSTAGRAM_ACCESS_TOKEN;
-    const igUserId = process.env.INSTAGRAM_USER_ID;
-    const liToken = process.env.LINKEDIN_ACCESS_TOKEN;
-    const liOrgId = process.env.LINKEDIN_ORGANIZATION_ID;
+    // Prefer DB-stored tokens (set via Settings > Integrations), fall back to env vars
+    const { data: integrationRows } = await supabase
+      .from("sm_integrations")
+      .select("platform, access_token, account_id, is_connected")
+      .in("platform", ["instagram", "linkedin"]);
+
+    const integrationMap = Object.fromEntries(
+      ((integrationRows as Array<{ platform: string; access_token: string | null; account_id: string | null; is_connected: boolean }>) || [])
+        .filter((r) => r.is_connected && r.access_token)
+        .map((r) => [r.platform, r])
+    );
+
+    const igToken = integrationMap["instagram"]?.access_token || process.env.INSTAGRAM_ACCESS_TOKEN;
+    const igUserId = integrationMap["instagram"]?.account_id || process.env.INSTAGRAM_USER_ID;
+    const liToken = integrationMap["linkedin"]?.access_token || process.env.LINKEDIN_ACCESS_TOKEN;
+    const liOrgId = integrationMap["linkedin"]?.account_id || process.env.LINKEDIN_ORGANIZATION_ID;
 
     const results: PublishResult[] = [];
     const emailPromises: Promise<void>[] = [];

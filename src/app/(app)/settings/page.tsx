@@ -49,23 +49,32 @@ const NOTIFICATION_OPTIONS = [
   { key: "publish_results", label: "Publish Results" },
 ];
 
-const INTEGRATIONS = [
-  {
-    name: "Instagram",
+interface IntegrationStatus {
+  platform: string;
+  is_connected: boolean;
+  account_id: string | null;
+  token_issued_at: string | null;
+  days_until_expiry: number | null;
+}
+
+const PLATFORM_META: Record<string, { icon: string; label: string; tokenLabel: string; accountLabel: string; accountPlaceholder: string; docs: string }> = {
+  instagram: {
     icon: "📷",
-    description: "Connect your Instagram account",
+    label: "Instagram",
+    tokenLabel: "Long-Lived Access Token",
+    accountLabel: "Instagram User ID",
+    accountPlaceholder: "e.g. 17841400000000000",
+    docs: "https://developers.facebook.com/tools/explorer/",
   },
-  {
-    name: "LinkedIn",
+  linkedin: {
     icon: "💼",
-    description: "Connect your LinkedIn profile",
+    label: "LinkedIn",
+    tokenLabel: "OAuth Access Token",
+    accountLabel: "Organization ID",
+    accountPlaceholder: "e.g. 123456789",
+    docs: "https://www.linkedin.com/developers/tools/oauth",
   },
-  {
-    name: "Google Sheets",
-    icon: "📊",
-    description: "Sync with Google Sheets",
-  },
-];
+};
 
 export default function SettingsPage() {
   const { user } = useUser();
@@ -79,6 +88,14 @@ export default function SettingsPage() {
   const [notificationPrefs, setNotificationPrefs] =
     useState<NotificationPreferences>({});
   const [savingNotifications, setSavingNotifications] = useState(false);
+
+  // Integration state
+  const [integrations, setIntegrations] = useState<Record<string, IntegrationStatus>>({});
+  const [configuringPlatform, setConfiguringPlatform] = useState<string | null>(null);
+  const [tokenInput, setTokenInput] = useState("");
+  const [accountIdInput, setAccountIdInput] = useState("");
+  const [savingIntegration, setSavingIntegration] = useState(false);
+  const [disconnectingPlatform, setDisconnectingPlatform] = useState<string | null>(null);
 
   // Team state
   const [teamMembers, setTeamMembers] = useState<SmUser[]>([]);
@@ -122,6 +139,81 @@ export default function SettingsPage() {
       fetchTeam();
     }
   }, [user?.role, supabase]);
+
+  // Load integration statuses
+  useEffect(() => {
+    if (!user) return;
+    const load = async () => {
+      const results = await Promise.allSettled([
+        fetch("/api/integrations/instagram").then((r) => r.json()),
+        fetch("/api/integrations/linkedin").then((r) => r.json()),
+      ]);
+      const map: Record<string, IntegrationStatus> = {};
+      for (const result of results) {
+        if (result.status === "fulfilled" && result.value?.platform) {
+          map[result.value.platform] = result.value;
+        }
+      }
+      setIntegrations(map);
+    };
+    load();
+  }, [user]);
+
+  const handleOpenConfigure = (platform: string) => {
+    setTokenInput("");
+    setAccountIdInput(integrations[platform]?.account_id || "");
+    setConfiguringPlatform(platform);
+  };
+
+  const handleSaveIntegration = async (platform: string) => {
+    if (!tokenInput.trim() || !accountIdInput.trim()) {
+      alert("Both token and account ID are required.");
+      return;
+    }
+    try {
+      setSavingIntegration(true);
+      const res = await fetch(`/api/integrations/${platform}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          access_token: tokenInput,
+          account_id: accountIdInput,
+          token_issued_at: new Date().toISOString(),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Save failed");
+      }
+      // Refresh status
+      const updated = await fetch(`/api/integrations/${platform}`).then((r) => r.json());
+      setIntegrations((prev) => ({ ...prev, [platform]: updated }));
+      setConfiguringPlatform(null);
+      setTokenInput("");
+      setAccountIdInput("");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save integration");
+    } finally {
+      setSavingIntegration(false);
+    }
+  };
+
+  const handleDisconnect = async (platform: string) => {
+    if (!confirm(`Disconnect ${PLATFORM_META[platform]?.label}? Publishing to this platform will stop.`)) return;
+    try {
+      setDisconnectingPlatform(platform);
+      const res = await fetch(`/api/integrations/${platform}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Disconnect failed");
+      setIntegrations((prev) => ({
+        ...prev,
+        [platform]: { ...prev[platform], is_connected: false, account_id: null, token_issued_at: null, days_until_expiry: null },
+      }));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to disconnect");
+    } finally {
+      setDisconnectingPlatform(null);
+    }
+  };
 
   const handleSaveProfile = async () => {
     if (!user) return;
@@ -170,10 +262,6 @@ export default function SettingsPage() {
       ...prev,
       [key]: !prev[key as keyof NotificationPreferences],
     }));
-  };
-
-  const handleIntegrationConnect = () => {
-    alert("Coming soon");
   };
 
   const handleInviteMember = async () => {
@@ -377,35 +465,147 @@ export default function SettingsPage() {
 
         {/* Integrations Tab */}
         <TabsContent value="integrations" className="space-y-6">
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {INTEGRATIONS.map((integration) => (
-              <Card key={integration.name} className="p-6">
-                <div className="space-y-4">
-                  <div className="text-3xl">{integration.icon}</div>
-                  <div>
-                    <h3 className="font-semibold">{integration.name}</h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {integration.description}
-                    </p>
-                  </div>
-
-                  <div className="py-3">
-                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-                      Not Connected
-                    </Badge>
-                  </div>
-
-                  <Button
-                    onClick={handleIntegrationConnect}
-                    className="w-full"
-                    variant="outline"
-                  >
-                    Connect
-                  </Button>
-                </div>
-              </Card>
-            ))}
+          <div>
+            <h3 className="text-lg font-semibold">Platform Connections</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Connect your social accounts so Houspire can publish content automatically.
+              {user.role !== "admin" && " Contact an admin to update connection tokens."}
+            </p>
           </div>
+
+          <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+            {["instagram", "linkedin"].map((platform) => {
+              const meta = PLATFORM_META[platform];
+              const status = integrations[platform];
+              const days = status?.days_until_expiry;
+              const isConfiguring = configuringPlatform === platform;
+
+              return (
+                <Card key={platform} className="p-6 space-y-4">
+                  {/* Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">{meta.icon}</span>
+                      <div>
+                        <h4 className="font-semibold">{meta.label}</h4>
+                        {status?.account_id && (
+                          <p className="text-xs text-gray-500">ID: {status.account_id}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      {status?.is_connected ? (
+                        <Badge className="bg-green-50 text-green-700 border-green-200" variant="outline">
+                          Connected
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-red-50 text-red-700 border-red-200" variant="outline">
+                          Not Connected
+                        </Badge>
+                      )}
+                      {status?.is_connected && days !== null && days !== undefined && (
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-xs",
+                            days <= 0
+                              ? "bg-red-50 text-red-700 border-red-200"
+                              : days <= 10
+                              ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                              : "bg-gray-50 text-gray-600 border-gray-200"
+                          )}
+                        >
+                          {days <= 0 ? "Token expired" : `Token expires in ${days}d`}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Configure form (admin only) */}
+                  {user.role === "admin" && isConfiguring && (
+                    <div className="border rounded-lg p-4 space-y-3 bg-gray-50">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">{meta.tokenLabel}</Label>
+                        <Input
+                          type="password"
+                          placeholder="Paste token here..."
+                          value={tokenInput}
+                          onChange={(e) => setTokenInput(e.target.value)}
+                          className="font-mono text-xs"
+                        />
+                        <a
+                          href={meta.docs}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:underline"
+                        >
+                          How to get a token →
+                        </a>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">{meta.accountLabel}</Label>
+                        <Input
+                          placeholder={meta.accountPlaceholder}
+                          value={accountIdInput}
+                          onChange={(e) => setAccountIdInput(e.target.value)}
+                          className="font-mono text-xs"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          disabled={savingIntegration || !tokenInput.trim() || !accountIdInput.trim()}
+                          onClick={() => handleSaveIntegration(platform)}
+                          className="flex-1"
+                        >
+                          {savingIntegration ? "Saving..." : "Save & Connect"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setConfiguringPlatform(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Admin actions */}
+                  {user.role === "admin" && !isConfiguring && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => handleOpenConfigure(platform)}
+                      >
+                        {status?.is_connected ? "Reconfigure" : "Connect"}
+                      </Button>
+                      {status?.is_connected && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 border-red-200 hover:bg-red-50"
+                          disabled={disconnectingPlatform === platform}
+                          onClick={() => handleDisconnect(platform)}
+                        >
+                          {disconnectingPlatform === platform ? "..." : "Disconnect"}
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+
+          {/* Info banner */}
+          <Card className="p-4 bg-blue-50 border-blue-200">
+            <p className="text-sm text-blue-800">
+              <strong>How publishing works:</strong> When a task reaches &quot;Scheduled&quot; status and its scheduled time arrives, the publish cron automatically posts to the connected platforms. Tokens are valid for 60 days — Instagram tokens auto-refresh weekly, LinkedIn tokens require manual re-authorization.
+            </p>
+          </Card>
         </TabsContent>
 
         {/* Team Tab (Admin Only) */}

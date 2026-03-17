@@ -72,6 +72,12 @@ export type Database = {
         Update: { avg_engagement_rate?: number | null; comments?: number | null; created_at?: string | null; date?: string; engagement_rate?: number | null; follower_change?: number | null; follower_count?: number | null; id?: string; impressions?: number | null; likes?: number | null; metadata?: Json | null; platform?: string; posts_published?: number | null; reach?: number | null; saves?: number | null; shares?: number | null; top_post_id?: string | null; total_comments?: number | null; total_impressions?: number | null; total_likes?: number | null; total_reach?: number | null; total_saves?: number | null; total_shares?: number | null; workspace_id?: string | null }
         Relationships: []
       }
+      sm_integrations: {
+        Row: { id: string; platform: string; access_token: string | null; account_id: string | null; token_issued_at: string | null; is_connected: boolean | null; created_at: string | null; updated_at: string | null }
+        Insert: { id?: string; platform: string; access_token?: string | null; account_id?: string | null; token_issued_at?: string | null; is_connected?: boolean | null; created_at?: string | null; updated_at?: string | null }
+        Update: { id?: string; platform?: string; access_token?: string | null; account_id?: string | null; token_issued_at?: string | null; is_connected?: boolean | null; created_at?: string | null; updated_at?: string | null }
+        Relationships: []
+      }
       sm_hashtag_analytics: {
         Row: { avg_engagement_rate: number | null; created_at: string | null; hashtag: string; id: string; last_used_at: string | null; platform: string | null; times_used: number | null; total_engagement: number | null; total_impressions: number | null; total_reach: number | null; updated_at: string | null; usage_count: number; workspace_id: string | null }
         Insert: { avg_engagement_rate?: number | null; created_at?: string | null; hashtag: string; id?: string; last_used_at?: string | null; platform?: string | null; times_used?: number | null; total_engagement?: number | null; total_impressions?: number | null; total_reach?: number | null; updated_at?: string | null; usage_count?: number; workspace_id?: string | null }
